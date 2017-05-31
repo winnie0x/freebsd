@@ -239,7 +239,7 @@ sys_mmap(td, uap)
 	}
 	if ((flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_HASSEMAPHORE |
 	    MAP_STACK | MAP_NOSYNC | MAP_ANON | MAP_EXCL | MAP_NOCORE |
-	    MAP_PREFAULT_READ |
+	    MAP_PREFAULT_READ | MAP_SHAREPT |
 #ifdef MAP_32BIT
 	    MAP_32BIT |
 #endif
@@ -360,6 +360,9 @@ sys_mmap(td, uap)
 			goto done;
 		}
 
+		/* Pass the page table sharing flag down to pmap. */
+		if (flags & MAP_SHAREPT)
+			prot |= VM_PROT_SHAREPT;
 		/* This relies on VM_PROT_* matching PROT_*. */
 		error = fo_mmap(fp, &vms->vm_map, &addr, size, prot,
 		    cap_maxprot, flags, pos, td);

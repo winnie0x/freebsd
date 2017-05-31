@@ -87,6 +87,11 @@
 #endif /* !_KERNEL */
 
 /*
+ * Share page table pages
+ */
+#define MAP_SHAREPT	 0x2000
+
+/*
  * Extended flags
  */
 #define	MAP_EXCL	 0x00004000 /* for MAP_FIXED, fail if address is used */

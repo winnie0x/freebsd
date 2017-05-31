@@ -4628,6 +4628,8 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	vm_pindex_t diff, psize;
 
 	VM_OBJECT_ASSERT_LOCKED(m_start->object);
+	if (prot & VM_PROT_SHAREPT)
+		printf("Got SHAREPT\n");
 
 	psize = atop(end - start);
 	mpte = NULL;
