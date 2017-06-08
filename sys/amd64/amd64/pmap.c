@@ -609,8 +609,11 @@ static boolean_t pmap_demote_pdpe(pmap_t pmap, pdp_entry_t *pdpe,
     vm_offset_t va);
 static boolean_t pmap_enter_pde(pmap_t pmap, vm_offset_t va, vm_page_t m,
     vm_prot_t prot, struct rwlock **lockp);
+static vm_page_t pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va,
+    vm_page_t m, vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp);
 static vm_page_t pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va,
     vm_page_t m, vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp);
+static boolean_t pmap_check_mpte(pmap_t pmap, vm_page_t mpte);
 static void pmap_fill_ptp(pt_entry_t *firstpte, pt_entry_t newpte);
 static int pmap_insert_pt_page(pmap_t pmap, vm_page_t mpte);
 static void pmap_kenter_attr(vm_offset_t va, vm_paddr_t pa, int mode);
@@ -634,6 +637,8 @@ static void pmap_update_pde(pmap_t pmap, vm_offset_t va, pd_entry_t *pde,
     pd_entry_t newpde);
 static void pmap_update_pde_invalidate(pmap_t, vm_offset_t va, pd_entry_t pde);
 
+static vm_page_t pmap_insert_mpte(pmap_t pmap, vm_pindex_t ptepindex,
+		struct rwlock **lockp, vm_page_t mpte);
 static vm_page_t _pmap_allocpte(pmap_t pmap, vm_pindex_t ptepindex,
 		struct rwlock **lockp);
 static vm_page_t pmap_allocpde(pmap_t pmap, vm_offset_t va,
@@ -2457,15 +2462,7 @@ pmap_pinit(pmap_t pmap)
 static vm_page_t
 _pmap_allocpte(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 {
-	vm_page_t m, pdppg, pdpg;
-	pt_entry_t PG_A, PG_M, PG_RW, PG_V;
-
-	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
-
-	PG_A = pmap_accessed_bit(pmap);
-	PG_M = pmap_modified_bit(pmap);
-	PG_V = pmap_valid_bit(pmap);
-	PG_RW = pmap_rw_bit(pmap);
+	vm_page_t m;
 
 	/*
 	 * Allocate a page table page.
@@ -2488,6 +2485,28 @@ _pmap_allocpte(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	}
 	if ((m->flags & PG_ZERO) == 0)
 		pmap_zero_page(m);
+
+	return (pmap_insert_mpte(pmap, ptepindex, lockp, m));
+}
+
+/*
+ * Insert the given page table page into the physical map.
+ */
+static vm_page_t
+pmap_insert_mpte(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp,
+    vm_page_t mpte)
+{
+	vm_page_t m, pdppg, pdpg;
+	pt_entry_t PG_A, PG_M, PG_RW, PG_V;
+
+	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
+
+	PG_A = pmap_accessed_bit(pmap);
+	PG_M = pmap_modified_bit(pmap);
+	PG_V = pmap_valid_bit(pmap);
+	PG_RW = pmap_rw_bit(pmap);
+
+	m = mpte;
 
 	/*
 	 * Map the pagetable page into the process address space, if
@@ -3730,7 +3749,7 @@ pmap_remove_page(pmap_t pmap, vm_offset_t va, pd_entry_t *pde,
 
 	PG_V = pmap_valid_bit(pmap);
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
-	if ((*pde & PG_V) == 0)
+	if ((*pde & PG_V) == 0 || (*pde & PG_SHAREPT))
 		return;
 	pte = pmap_pde_to_pte(pde, va);
 	if ((*pte & PG_V) == 0)
@@ -3849,6 +3868,18 @@ pmap_remove(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 				continue;
 			} else
 				ptpaddr = *pde;
+		}
+
+		/*
+		 * Check for shared page table page.
+		 */
+		if (ptpaddr & PG_SHAREPT) {
+			pte_clear(pde);
+			pmap_invalidate_range(pmap, sva, va_next);
+			pmap_resident_count_dec(pmap, 1);
+			vm_page_t pdpg = PHYS_TO_VM_PAGE(*pdpe & PG_FRAME);
+			pmap_unwire_ptp(pmap, sva, pdpg, &free);
+			continue;
 		}
 
 		/*
@@ -4628,28 +4659,90 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	vm_pindex_t diff, psize;
 
 	VM_OBJECT_ASSERT_LOCKED(m_start->object);
-	if (prot & VM_PROT_SHAREPT)
-		printf("Got SHAREPT\n");
 
 	psize = atop(end - start);
 	mpte = NULL;
 	m = m_start;
 	lock = NULL;
 	PMAP_LOCK(pmap);
+
+	if (prot & VM_PROT_SHAREPT)
+		KASSERT((start & PDRMASK) == 0,
+		    ("sharept: object start address not 2M aligned"));
+
 	while (m != NULL && (diff = m->pindex - m_start->pindex) < psize) {
 		va = start + ptoa(diff);
 		if ((va & PDRMASK) == 0 && va + NBPDR <= end &&
 		    m->psind == 1 && pmap_ps_enabled(pmap) &&
-		    pmap_enter_pde(pmap, va, m, prot, &lock))
+		    pmap_enter_pde(pmap, va, m, prot, &lock)) {
 			m = &m[NBPDR / PAGE_SIZE - 1];
-		else
-			mpte = pmap_enter_quick_locked(pmap, va, m, prot,
-			    mpte, &lock);
+		} else {
+			if ((prot & VM_PROT_SHAREPT) == 0) {
+				mpte = pmap_enter_quick_locked(pmap, va, m,
+				    prot, mpte, &lock);
+			} else {
+				if ((va & PDRMASK) != 0) {
+					printf("Not 2M");
+					mpte = pmap_enter_quick_locked(pmap,
+					    va, m, prot, mpte, &lock);
+				} else {
+					/*
+					 * We are on a 2M boundary, so try to
+					 * share the page table page that
+					 * contains the next 512 PTE's.
+					 */
+					mpte = pmap_enter_try_share_pt(pmap,
+					    va, m, prot, mpte, &lock);
+				}
+			}
+		}
 		m = TAILQ_NEXT(m, listq);
 	}
+
 	if (lock != NULL)
 		rw_wunlock(lock);
 	PMAP_UNLOCK(pmap);
+}
+
+static vm_page_t
+pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va, vm_page_t m,
+    vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp)
+{
+	pt_entry_t PG_V = pmap_valid_bit(pmap);
+	pd_entry_t *ptepa = pmap_pde(pmap, va);
+retry:
+	if (ptepa && (*ptepa & PG_V) != 0) {
+		printf("Existing mpte");
+		mpte = pmap_enter_quick_locked(pmap, va, m, prot, mpte, lockp);
+	} else {
+		vm_object_t obj = m->object;
+		if (obj->pt_pmap == NULL) {
+			obj->pt_pmap = malloc(sizeof(struct pmap), M_VMOBJECT,
+			    M_ZERO | M_WAITOK);
+		}
+		pmap_t ppmap = obj->pt_pmap;
+		vm_pindex_t mpindex = m->pindex;
+		mpindex >>= NPTEPGSHIFT;
+		vm_page_t mpte = vm_radix_lookup(&ppmap->pm_root, mpindex);
+		if (mpte == NULL) {
+			printf("\nCreating mpte\n");
+			mpte = pmap_enter_quick_locked(pmap, va, m,
+			    prot, NULL, lockp);
+			mpte->pindex = mpindex;
+			if (vm_radix_insert(&ppmap->pm_root, mpte)) {
+				printf("\nvm_radix_insert failed\n");
+				return (mpte);
+			}
+		} else {
+			printf("\nSharing mpte\n");
+			vm_pindex_t ptepindex = pmap_pde_pindex(va);
+			pmap_insert_mpte(pmap, ptepindex, lockp, mpte);
+			pde_store(ptepa, *ptepa | PG_SHAREPT);
+			goto retry;
+		}
+	}
+
+	return (mpte);
 }
 
 /*
@@ -4681,6 +4774,7 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 	struct spglist free;
 	pt_entry_t *pte, PG_V;
 	vm_paddr_t pa;
+	boolean_t pt_shared = FALSE;
 
 	KASSERT(va < kmi.clean_sva || va >= kmi.clean_eva ||
 	    (m->oflags & VPO_UNMANAGED) != 0,
@@ -4701,6 +4795,12 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 		 */
 		ptepindex = pmap_pde_pindex(va);
 		if (mpte && (mpte->pindex == ptepindex)) {
+			/*
+			 * TODO This branch is never gonna be chosen in the
+			 * case of shared PTP. It's always gonna enter the else
+			 * case and do a full page table walk, only to find out
+			 * that the PTE is already there. Change this?
+			 */
 			mpte->wire_count++;
 		} else {
 			/*
@@ -4719,6 +4819,8 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 					return (NULL);
 				mpte = PHYS_TO_VM_PAGE(*ptepa & PG_FRAME);
 				mpte->wire_count++;
+				if (*ptepa & PG_SHAREPT)
+					pt_shared = TRUE;
 			} else {
 				/*
 				 * Pass NULL instead of the PV list lock
@@ -4727,6 +4829,10 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 				mpte = _pmap_allocpte(pmap, ptepindex, NULL);
 				if (mpte == NULL)
 					return (mpte);
+				if (prot & VM_PROT_SHAREPT) {
+					pde_store(ptepa, *ptepa | PG_SHAREPT);
+					pt_shared = TRUE;
+				}
 			}
 		}
 		pte = (pt_entry_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(mpte));
@@ -4740,13 +4846,17 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 			mpte->wire_count--;
 			mpte = NULL;
 		}
+		if (prot & VM_PROT_SHAREPT) {
+			KASSERT(mpte->wire_count == 4, "wire count should be 4");
+			KASSERT(pmap_check_mpte(pmap, mpte), "mpte sanity check 1");
+		}
 		return (mpte);
 	}
 
 	/*
 	 * Enter on the PV list if part of our managed memory.
 	 */
-	if ((m->oflags & VPO_UNMANAGED) == 0 &&
+	if ((m->oflags & VPO_UNMANAGED) == 0 && !pt_shared &&
 	    !pmap_try_insert_pv_entry(pmap, va, m, lockp)) {
 		if (mpte != NULL) {
 			SLIST_INIT(&free);
@@ -4762,6 +4872,8 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 			}
 			mpte = NULL;
 		}
+		if (prot & VM_PROT_SHAREPT)
+			KASSERT(pmap_check_mpte(pmap, mpte), "mpte sanity check 2");
 		return (mpte);
 	}
 
@@ -4781,7 +4893,24 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 		pte_store(pte, pa | PG_V | PG_U);
 	else
 		pte_store(pte, pa | PG_V | PG_U | PG_MANAGED);
+	if (prot & VM_PROT_SHAREPT)
+		KASSERT(pmap_check_mpte(pmap, mpte), "mpte sanity check 3");
 	return (mpte);
+}
+
+static boolean_t
+pmap_check_mpte(pmap_t pmap, vm_page_t mpte)
+{
+	pt_entry_t PG_V = pmap_valid_bit(pmap);
+	pt_entry_t *pte = (pt_entry_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(mpte));
+	u_int count = 0;
+	for (int i = 0; i < NPTEPG; i++) {
+		if (pte[i] & PG_V) {
+			count++;
+		}
+	}
+
+	return (count == mpte->wire_count ? TRUE : FALSE);
 }
 
 /*
