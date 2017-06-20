@@ -360,9 +360,6 @@ sys_mmap(td, uap)
 			goto done;
 		}
 
-		/* Pass the page table sharing flag down to pmap. */
-		if (flags & MAP_SHAREPT)
-			prot |= VM_PROT_SHAREPT;
 		/* This relies on VM_PROT_* matching PROT_*. */
 		error = fo_mmap(fp, &vms->vm_map, &addr, size, prot,
 		    cap_maxprot, flags, pos, td);
@@ -1558,6 +1555,8 @@ vm_mmap_object(vm_map_t map, vm_offset_t *addr, vm_size_t size, vm_prot_t prot,
 	}
 	if ((flags & MAP_EXCL) != 0)
 		docow |= MAP_CHECK_EXCL;
+	if (flags & MAP_SHAREPT)
+		docow |= MAP_TRY_SHARE_PT;
 
 	if (fitit) {
 		if ((flags & MAP_ALIGNMENT_MASK) == MAP_ALIGNED_SUPER)
