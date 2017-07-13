@@ -612,6 +612,8 @@ static boolean_t pmap_enter_pde(pmap_t pmap, vm_offset_t va, vm_page_t m,
     vm_prot_t prot, struct rwlock **lockp);
 static vm_page_t pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va,
     vm_page_t m, vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp);
+static boolean_t pmap_try_register_mpte(pmap_t pmap, vm_offset_t va,
+    vm_object_t obj, vm_page_t mpte, vm_pindex_t mpindex);
 static vm_page_t pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va,
     vm_page_t m, vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp);
 static boolean_t pmap_check_mpte(pmap_t pmap, vm_page_t mpte);
@@ -3750,6 +3752,7 @@ pmap_remove_page(pmap_t pmap, vm_offset_t va, pd_entry_t *pde,
 
 	PG_V = pmap_valid_bit(pmap);
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
+	/* TODO should really handle shared PTP. */
 	if ((*pde & PG_V) == 0 || (*pde & PG_SHAREPT))
 		return;
 	pte = pmap_pde_to_pte(pde, va);
@@ -4348,7 +4351,6 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 {
 	struct rwlock *lock;
 	pd_entry_t *pde, origpde;
-	pmap_t ppmap;
 	pt_entry_t *pte, PG_G, PG_A, PG_M, PG_RW, PG_V;
 	pt_entry_t newpte, origpte;
 	pv_entry_t pv;
@@ -4444,16 +4446,15 @@ retry:
 				obj->pt_pmap = malloc(sizeof(struct pmap),
 				    M_VMOBJECT, M_ZERO | M_WAITOK);
 			}
-			ppmap = obj->pt_pmap;
 			mpindex = m->pindex;
 			mpindex >>= NPTEPGSHIFT;
-			mpte = vm_radix_lookup(&ppmap->pm_root, mpindex);
+			mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
 			if (mpte == NULL) {
 				printf("pmap_enter: Creating mpte\n");
 				goto allocpte;
 			} else {
 				printf("pmap_enter: Sharing mpte\n");
-				if (mpte->object == m->object) {
+				if (mpte->object == obj) {
 					if (!pmap_sharept_ok(pmap, va, mpte)) {
 						flags &= ~PMAP_ENTER_SHAREPT;
 						goto allocpte;
@@ -4461,6 +4462,7 @@ retry:
 					/* TODO handle error */
 					pmap_insert_mpte(pmap, ptepindex,
 					    &lock, mpte);
+					printf("pmap_enter: mpte inserted\n");
 					pde = pmap_pde(pmap, va);
 					pde_store(pde, *pde | PG_SHAREPT);
 					/* Let "retry" increment wire count. */
@@ -4492,17 +4494,12 @@ allocpte:
 			printf("pmap_enter: copypt successful\n");
 		}
 		if (flags & PMAP_ENTER_SHAREPT) {
-			mpte->pindex = mpindex;
-			if (vm_radix_insert(&ppmap->pm_root, mpte) == 0) {
+			if (pmap_try_register_mpte(pmap, va, obj, mpte,
+			    mpindex)) {
 				printf("pmap_enter: PTP inserted into radix\n");
-				pde = pmap_pde(pmap, va);
-				pde_store(pde, *pde | PG_SHAREPT);
-				mpte->object = m->object;
 				pt_shared = TRUE;
-			} else {
-				mpte->pindex = ptepindex;
+			} else
 				printf("pmap_enter: vm_radix_insert failed\n");
-			}
 		}
 		goto retry;
 	} else
@@ -4844,33 +4841,32 @@ retry:
 			obj->pt_pmap = malloc(sizeof(struct pmap), M_VMOBJECT,
 			    M_ZERO | M_WAITOK);
 		}
-		pmap_t ppmap = obj->pt_pmap;
-		vm_pindex_t ptepindex = pmap_pde_pindex(va);
 		vm_pindex_t mpindex = m->pindex;
 		mpindex >>= NPTEPGSHIFT;
 		/* TODO How to deal with a provided mpte that is non-NULL? */
-		mpte = vm_radix_lookup(&ppmap->pm_root, mpindex);
+		mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
 		if (mpte == NULL) {
 			printf("pmap_enter_try_share: Creating mpte\n");
 			mpte = pmap_enter_quick_locked(pmap, va, m,
 			    prot, NULL, lockp);
-			mpte->pindex = mpindex;
-			if (vm_radix_insert(&ppmap->pm_root, mpte)) {
-				mpte->pindex = ptepindex;
-				/* TODO need to clear the PG_SHAREPT bit */
-				printf("pmap_enter_try_share: vm_radix_insert \
-				    failed\n");
-			}
+			if (pmap_try_register_mpte(pmap, va, obj, mpte,
+			    mpindex))
+				printf("pmap_enter_try_share: PTP inserted "
+				    "into radix\n");
+			else
+				printf("pmap_enter_try_share: vm_radix_insert "
+				    "failed\n");
 		} else {
 			printf("pmap_enter_try_share: Sharing mpte\n");
-			if (mpte->object == m->object) {
+			if (mpte->object == obj) {
 				if (!pmap_sharept_ok(pmap, va, mpte))
 					return (pmap_enter_quick_locked(pmap,
 					    va, m, prot & ~VM_PROT_SHAREPT,
 					    NULL, lockp));
 				/* TODO handle NULL return */
-				pmap_insert_mpte(pmap, ptepindex, lockp, mpte);
-				printf("pmap_enter_try_share: inserted\n");
+				pmap_insert_mpte(pmap, pmap_pde_pindex(va),
+				    lockp, mpte);
+				printf("pmap_enter_try_share: mpte inserted\n");
 				ptepa = pmap_pde(pmap, va);
 				pde_store(ptepa, *ptepa | PG_SHAREPT);
 				goto retry;
@@ -4880,6 +4876,30 @@ retry:
 	}
 
 	return (mpte);
+}
+
+/*
+ * Registers a page table page that covers the specified virtual address with
+ * the specified object for future sharing and sets the shared bit in the
+ * corresponding pde.
+ *
+ * Returns TRUE if successful and FALSE otherwise. The caller doesn't need to
+ * undo anything in the case of failure.
+ */
+static boolean_t
+pmap_try_register_mpte(pmap_t pmap, vm_offset_t va, vm_object_t obj,
+    vm_page_t mpte, vm_pindex_t mpindex)
+{
+	mpte->pindex = mpindex;
+	if (vm_radix_insert(&obj->pt_pmap->pm_root, mpte) == 0) {
+		pd_entry_t *pde = pmap_pde(pmap, va);
+		pde_store(pde, *pde | PG_SHAREPT);
+		mpte->object = obj;
+		return (TRUE);
+	} else {
+		mpte->pindex = pmap_pde_pindex(va);
+		return (FALSE);
+	}
 }
 
 /*
@@ -4936,9 +4956,9 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 		 * mapped at a low virtual address?
 		 */
 		if (mpte && (mpte->pindex == ((prot & VM_PROT_SHAREPT) ?
-		    m->pindex >> NPTEPGSHIFT : ptepindex)))
+		    m->pindex >> NPTEPGSHIFT : ptepindex))) {
 			mpte->wire_count++;
-		else {
+		} else {
 			/*
 			 * Get the page directory entry
 			 */
@@ -4955,8 +4975,11 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 					return (NULL);
 				mpte = PHYS_TO_VM_PAGE(*ptepa & PG_FRAME);
 				mpte->wire_count++;
-				if (*ptepa & PG_SHAREPT)
+				if (*ptepa & PG_SHAREPT) {
+					KASSERT(prot & VM_PROT_SHAREPT, ("prot "
+					    "argument missing SHAREPT bit"));
 					pt_shared = TRUE;
+				}
 			} else {
 				/*
 				 * Pass NULL instead of the PV list lock
@@ -4965,12 +4988,8 @@ pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va, vm_page_t m,
 				mpte = _pmap_allocpte(pmap, ptepindex, NULL);
 				if (mpte == NULL)
 					return (mpte);
-				if (prot & VM_PROT_SHAREPT) {
-					ptepa = pmap_pde(pmap, va);
-					pde_store(ptepa, *ptepa | PG_SHAREPT);
-					mpte->object = m->object;
+				if (prot & VM_PROT_SHAREPT)
 					pt_shared = TRUE;
-				}
 			}
 		}
 		pte = (pt_entry_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(mpte));
