@@ -162,9 +162,6 @@ map_object(int fd, const char *path, const struct stat *sb)
 		    _rtld_error("%s: error mapping PT_NOTE (%d)", path, errno);
 		    goto error;
 		}
-		if (strcmp(path, "/lib/libc.so.7") == 0) {
-			printf("note_map at %lx\n", (unsigned long)note_map);
-		}
 		note_start = (Elf_Addr)(note_map + phdr->p_offset -
 		  trunc_page(phdr->p_offset));
 	    } else {
@@ -195,13 +192,11 @@ map_object(int fd, const char *path, const struct stat *sb)
     mapsize = base_vlimit - base_vaddr;
     base_addr = (caddr_t) base_vaddr;
     base_flags = MAP_PRIVATE | MAP_ANON | MAP_NOCORE;
-    if ((npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1]) ||
-	strcmp(path, "/lib/libc.so.7") == 0)
+    /* if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1]) */
+    if (npagesizes > 1)
 	base_flags |= MAP_ALIGNED_SUPER;
 
     mapbase = mmap(base_addr, mapsize, PROT_NONE, base_flags, -1, 0);
-    if (strcmp(path, "/lib/libc.so.7") == 0)
-	    printf("Suggested %p got mapbase %p\n", base_addr, mapbase);
     if (mapbase == (caddr_t) -1) {
 	_rtld_error("%s: mmap of entire address space failed: %s",
 	  path, rtld_strerror(errno));
@@ -223,8 +218,7 @@ map_object(int fd, const char *path, const struct stat *sb)
 	data_flags = convert_flags(segs[i]->p_flags) | MAP_FIXED;
 	if (mmap(data_addr, data_vlimit - data_vaddr, data_prot,
 	  data_flags | MAP_PREFAULT_READ |
-	  ((strcmp(path, "/lib/libc.so.7") || (data_prot & PROT_WRITE)) ?
-	  0 : MAP_SHAREPT),
+	  ((data_prot & PROT_WRITE) ? 0 : MAP_SHAREPT),
 	  fd, data_offset) == (caddr_t) -1) {
 	    _rtld_error("%s: mmap of data failed: %s", path,
 		rtld_strerror(errno));
