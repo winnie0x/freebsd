@@ -610,8 +610,8 @@ static boolean_t pmap_demote_pdpe(pmap_t pmap, pdp_entry_t *pdpe,
 static boolean_t pmap_sharept_ok(pmap_t pmap, vm_offset_t va, vm_page_t mpte);
 static boolean_t pmap_enter_pde(pmap_t pmap, vm_offset_t va, vm_page_t m,
     vm_prot_t prot, struct rwlock **lockp);
-static vm_page_t pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va,
-    vm_page_t m, vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp);
+static boolean_t pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va,
+    vm_page_t m, vm_prot_t prot, vm_page_t *mpte, struct rwlock **lockp);
 static boolean_t pmap_try_register_mpte(pmap_t pmap, vm_offset_t va,
     vm_object_t obj, vm_page_t mpte, vm_pindex_t mpindex);
 static vm_page_t pmap_enter_quick_locked(pmap_t pmap, vm_offset_t va,
@@ -4776,7 +4776,7 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	struct rwlock *lock;
 	vm_offset_t va;
 	vm_page_t m, mpte;
-	vm_pindex_t diff, psize;
+	vm_pindex_t diff, mpindex, psize;
 
 	VM_OBJECT_ASSERT_LOCKED(m_start->object);
 
@@ -4785,10 +4785,6 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	m = m_start;
 	lock = NULL;
 	PMAP_LOCK(pmap);
-
-	if (prot & VM_PROT_SHAREPT)
-		KASSERT((start & PDRMASK) == 0,
-		    ("sharept: object start %lx not 2M aligned", start));
 
 	while (m != NULL && (diff = m->pindex - m_start->pindex) < psize) {
 		va = start + ptoa(diff);
@@ -4801,18 +4797,38 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 				mpte = pmap_enter_quick_locked(pmap, va, m,
 				    prot, mpte, &lock);
 			} else {
-				if ((va & PDRMASK) != 0) {
-					printf("Not 2M");
-					mpte = pmap_enter_quick_locked(pmap,
-					    va, m, prot, mpte, &lock);
-				} else {
+				if (((va & PDRMASK) >> PAGE_SHIFT) ==
+				    (m->pindex & (NPTEPG - 1))) {
 					/*
-					 * We are on a 2M boundary, so try to
-					 * share the page table page that
-					 * contains the next 512 PTE's.
+					 * Virtual address alignment matches
+					 * the way we set up shared page table
+					 * pages for objects, so try to share
+					 * the page table page that contains
+					 * the next 512 PTE's.
 					 */
-					mpte = pmap_enter_try_share_pt(pmap,
-					    va, m, prot, mpte, &lock);
+					if (pmap_enter_try_share_pt(pmap,
+					    va, m, prot, &mpte, &lock)) {
+						/*
+						 * Skip to the next 2M region
+						 * or the end of the request,
+						 * whichever comes first.
+						 */
+						mpindex = m->pindex >>
+						    NPTEPGSHIFT;
+						while (m != NULL &&
+						    (diff = m->pindex -
+						    m_start->pindex) < psize &&
+						    (m->pindex >> NPTEPGSHIFT
+						    == mpindex))
+							m = TAILQ_NEXT(m,
+							    listq);
+						continue;
+					}
+				} else {
+					printf("Not aligned for PTP sharing\n");
+					mpte = pmap_enter_quick_locked(pmap,
+					    va, m, prot & ~VM_PROT_SHAREPT,
+					    mpte, &lock);
 				}
 			}
 		}
@@ -4824,16 +4840,22 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 	PMAP_UNLOCK(pmap);
 }
 
-static vm_page_t
+/*
+ * Returns TRUE if and only if a shared page table page was successfully
+ * found and inserted into the specified pmap.
+ */
+static boolean_t
 pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va, vm_page_t m,
-    vm_prot_t prot, vm_page_t mpte, struct rwlock **lockp)
+    vm_prot_t prot, vm_page_t *mpte, struct rwlock **lockp)
 {
 	pd_entry_t *ptepa = pmap_pde(pmap, va);
 	pt_entry_t PG_V = pmap_valid_bit(pmap);
+	boolean_t rv = FALSE;
 retry:
 	if (ptepa && (*ptepa & PG_V) != 0) {
 		printf("pmap_enter_try_share: PTP already in place\n");
-		mpte = pmap_enter_quick_locked(pmap, va, m, prot, mpte, lockp);
+		*mpte = pmap_enter_quick_locked(pmap, va, m, prot, *mpte,
+		    lockp);
 	} else {
 		vm_object_t obj = m->object;
 		if (obj->pt_pmap == NULL) {
@@ -4843,39 +4865,46 @@ retry:
 		}
 		vm_pindex_t mpindex = m->pindex;
 		mpindex >>= NPTEPGSHIFT;
-		/* TODO How to deal with a provided mpte that is non-NULL? */
-		mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
-		if (mpte == NULL) {
+		/* TODO How to deal with a provided *mpte that is non-NULL? */
+		*mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
+		if (*mpte == NULL) {
 			printf("pmap_enter_try_share: Creating mpte\n");
-			mpte = pmap_enter_quick_locked(pmap, va, m,
+			*mpte = pmap_enter_quick_locked(pmap, va, m,
 			    prot, NULL, lockp);
-			if (pmap_try_register_mpte(pmap, va, obj, mpte,
+			if (pmap_try_register_mpte(pmap, va, obj, *mpte,
 			    mpindex))
 				printf("pmap_enter_try_share: PTP inserted "
 				    "into radix\n");
 			else
 				printf("pmap_enter_try_share: vm_radix_insert "
 				    "failed\n");
+				/*
+				 * TODO need to create a PV entry now that we
+				 * are not marking the PTP as shared.
+				 */
 		} else {
 			printf("pmap_enter_try_share: Sharing mpte\n");
-			if (mpte->object == obj) {
-				if (!pmap_sharept_ok(pmap, va, mpte))
-					return (pmap_enter_quick_locked(pmap,
+			if ((*mpte)->object == obj) {
+				if (!pmap_sharept_ok(pmap, va, *mpte)) {
+					pmap_enter_quick_locked(pmap,
 					    va, m, prot & ~VM_PROT_SHAREPT,
-					    NULL, lockp));
+					    NULL, lockp);
+					return (FALSE);
+				}
 				/* TODO handle NULL return */
 				pmap_insert_mpte(pmap, pmap_pde_pindex(va),
-				    lockp, mpte);
+				    lockp, *mpte);
 				printf("pmap_enter_try_share: mpte inserted\n");
 				ptepa = pmap_pde(pmap, va);
 				pde_store(ptepa, *ptepa | PG_SHAREPT);
+				rv = TRUE;
 				goto retry;
 			} else
 				panic("pmap_enter_try_share: different obj");
 		}
 	}
 
-	return (mpte);
+	return (rv);
 }
 
 /*
