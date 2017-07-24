@@ -4426,7 +4426,6 @@ retry:
 			mpte = PHYS_TO_VM_PAGE(*pde & PG_FRAME);
 			mpte->wire_count++;
 			if ((*pde & PG_SHAREPT)) {
-				printf("pmap_enter: PTP already in place\n");
 				if (mpte->object == m->object)
 					pt_shared = TRUE;
 				else
@@ -4449,11 +4448,7 @@ retry:
 			mpindex = m->pindex;
 			mpindex >>= NPTEPGSHIFT;
 			mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
-			if (mpte == NULL) {
-				printf("pmap_enter: Creating mpte\n");
-				goto allocpte;
-			} else {
-				printf("pmap_enter: Sharing mpte\n");
+			if (mpte != NULL) {
 				if (mpte->object == obj) {
 					if (!pmap_sharept_ok(pmap, va, mpte)) {
 						flags &= ~PMAP_ENTER_SHAREPT;
@@ -4462,7 +4457,6 @@ retry:
 					/* TODO handle error */
 					pmap_insert_mpte(pmap, ptepindex,
 					    &lock, mpte);
-					printf("pmap_enter: mpte inserted\n");
 					pde = pmap_pde(pmap, va);
 					pde_store(pde, *pde | PG_SHAREPT);
 					/* Let "retry" increment wire count. */
@@ -4491,15 +4485,11 @@ allocpte:
 			    PHYS_TO_VM_PAGE(origpde & PG_FRAME)->wire_count + 1;
 			pt_shared = FALSE;
 			flags &= ~PMAP_ENTER_SHAREPT;
-			printf("pmap_enter: copypt successful\n");
 		}
 		if (flags & PMAP_ENTER_SHAREPT) {
 			if (pmap_try_register_mpte(pmap, va, obj, mpte,
-			    mpindex)) {
-				printf("pmap_enter: PTP inserted into radix\n");
+			    mpindex))
 				pt_shared = TRUE;
-			} else
-				printf("pmap_enter: vm_radix_insert failed\n");
 		}
 		goto retry;
 	} else
@@ -4558,7 +4548,6 @@ allocpte:
 				goto validate;
 		}
 		if (pt_shared) {
-			printf("pmap_enter: initiating copypt\n");
 			/*
 			 * If we got here, then either the physical page OR
 			 * protection/wiring needs to change. Make a private
@@ -4824,12 +4813,10 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 							    listq);
 						continue;
 					}
-				} else {
-					printf("Not aligned for PTP sharing\n");
+				} else
 					mpte = pmap_enter_quick_locked(pmap,
 					    va, m, prot & ~VM_PROT_SHAREPT,
 					    mpte, &lock);
-				}
 			}
 		}
 		m = TAILQ_NEXT(m, listq);
@@ -4852,11 +4839,10 @@ pmap_enter_try_share_pt(pmap_t pmap, vm_offset_t va, vm_page_t m,
 	pt_entry_t PG_V = pmap_valid_bit(pmap);
 	boolean_t rv = FALSE;
 retry:
-	if (ptepa && (*ptepa & PG_V) != 0) {
-		printf("pmap_enter_try_share: PTP already in place\n");
+	if (ptepa && (*ptepa & PG_V) != 0)
 		*mpte = pmap_enter_quick_locked(pmap, va, m, prot, *mpte,
 		    lockp);
-	} else {
+	else {
 		vm_object_t obj = m->object;
 		if (obj->pt_pmap == NULL) {
 			/* TODO handle malloc NULL return */
@@ -4868,22 +4854,16 @@ retry:
 		/* TODO How to deal with a provided *mpte that is non-NULL? */
 		*mpte = vm_radix_lookup(&obj->pt_pmap->pm_root, mpindex);
 		if (*mpte == NULL) {
-			printf("pmap_enter_try_share: Creating mpte\n");
 			*mpte = pmap_enter_quick_locked(pmap, va, m,
 			    prot, NULL, lockp);
-			if (pmap_try_register_mpte(pmap, va, obj, *mpte,
-			    mpindex))
-				printf("pmap_enter_try_share: PTP inserted "
-				    "into radix\n");
-			else
-				printf("pmap_enter_try_share: vm_radix_insert "
-				    "failed\n");
+			if (!pmap_try_register_mpte(pmap, va, obj, *mpte,
+			    mpindex)) {
 				/*
 				 * TODO need to create a PV entry now that we
-				 * are not marking the PTP as shared.
+				 * failed to mark the PTP as shared.
 				 */
+			}
 		} else {
-			printf("pmap_enter_try_share: Sharing mpte\n");
 			if ((*mpte)->object == obj) {
 				if (!pmap_sharept_ok(pmap, va, *mpte)) {
 					pmap_enter_quick_locked(pmap,
@@ -4894,7 +4874,6 @@ retry:
 				/* TODO handle NULL return */
 				pmap_insert_mpte(pmap, pmap_pde_pindex(va),
 				    lockp, *mpte);
-				printf("pmap_enter_try_share: mpte inserted\n");
 				ptepa = pmap_pde(pmap, va);
 				pde_store(ptepa, *ptepa | PG_SHAREPT);
 				rv = TRUE;
@@ -5420,8 +5399,6 @@ pmap_copy(pmap_t dst_pmap, pmap_t src_pmap, vm_offset_t dst_addr, vm_size_t len,
 				*pde = VM_PAGE_TO_PHYS(srcmpte) | PG_U | PG_RW |
 				    PG_V | PG_A | PG_M | PG_SHAREPT;
 				pmap_resident_count_inc(dst_pmap, 1);
-				printf("pmap_copy: inserted for addr %lx\n",
-				    addr);
 			} else
 				dstmpde->wire_count--;
 			continue;

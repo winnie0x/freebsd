@@ -324,10 +324,6 @@ RetryFault:;
 		return (result);
 	}
 
-	if (fs.entry->eflags & MAP_ENTRY_SHAREPT)
-		printf("SHAREPT in vm_fault, vaddr %lx, fault_type %hhx\n",
-		    vaddr, fault_type);
-
 	map_generation = fs.map->timestamp;
 
 	if (fs.entry->eflags & MAP_ENTRY_NOFAULT) {
