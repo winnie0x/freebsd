@@ -4360,8 +4360,13 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 	vm_pindex_t mpindex, ptepindex;
 	boolean_t copypt, nosleep, pt_shared;
 
-	if ((flags & PMAP_ENTER_SHAREPT) != 0 && (prot & VM_PROT_WRITE) != 0)
-		panic("VM_PROT_WRITE not implemented for sharept");
+	if ((flags & PMAP_ENTER_SHAREPT) != 0) {
+		if ((prot & VM_PROT_WRITE) != 0)
+			panic("VM_PROT_WRITE not implemented for sharept");
+		if (((va & PDRMASK) >> PAGE_SHIFT) !=
+		    (m->pindex & (NPTEPG - 1)))
+			flags &= ~PMAP_ENTER_SHAREPT;
+	}
 
 	PG_A = pmap_accessed_bit(pmap);
 	PG_G = pmap_global_bit(pmap);
@@ -4782,41 +4787,37 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 		    pmap_enter_pde(pmap, va, m, prot, &lock)) {
 			m = &m[NBPDR / PAGE_SIZE - 1];
 		} else {
-			if ((prot & VM_PROT_SHAREPT) == 0) {
+			if ((prot & VM_PROT_SHAREPT) == 0 ||
+			    ((va & PDRMASK) >> PAGE_SHIFT) !=
+			    (m->pindex & (NPTEPG - 1))) {
 				mpte = pmap_enter_quick_locked(pmap, va, m,
-				    prot, mpte, &lock);
+				    prot & ~VM_PROT_SHAREPT, mpte, &lock);
 			} else {
-				if (((va & PDRMASK) >> PAGE_SHIFT) ==
-				    (m->pindex & (NPTEPG - 1))) {
+				/*
+				 * Virtual address alignment matches
+				 * the way we set up shared page table
+				 * pages for objects, so try to share
+				 * the page table page that contains
+				 * the next 512 PTE's.
+				 */
+				if (pmap_enter_try_share_pt(pmap,
+				    va, m, prot, &mpte, &lock)) {
 					/*
-					 * Virtual address alignment matches
-					 * the way we set up shared page table
-					 * pages for objects, so try to share
-					 * the page table page that contains
-					 * the next 512 PTE's.
+					 * Skip to the next 2M region
+					 * or the end of the request,
+					 * whichever comes first.
 					 */
-					if (pmap_enter_try_share_pt(pmap,
-					    va, m, prot, &mpte, &lock)) {
-						/*
-						 * Skip to the next 2M region
-						 * or the end of the request,
-						 * whichever comes first.
-						 */
-						mpindex = m->pindex >>
-						    NPTEPGSHIFT;
-						while (m != NULL &&
-						    (diff = m->pindex -
-						    m_start->pindex) < psize &&
-						    (m->pindex >> NPTEPGSHIFT
-						    == mpindex))
-							m = TAILQ_NEXT(m,
-							    listq);
-						continue;
-					}
-				} else
-					mpte = pmap_enter_quick_locked(pmap,
-					    va, m, prot & ~VM_PROT_SHAREPT,
-					    mpte, &lock);
+					mpindex = m->pindex >>
+					    NPTEPGSHIFT;
+					while (m != NULL &&
+					    (diff = m->pindex -
+					    m_start->pindex) < psize &&
+					    (m->pindex >> NPTEPGSHIFT
+					    == mpindex))
+						m = TAILQ_NEXT(m,
+						    listq);
+					continue;
+				}
 			}
 		}
 		m = TAILQ_NEXT(m, listq);
