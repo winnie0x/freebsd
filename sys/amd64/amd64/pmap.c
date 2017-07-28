@@ -3879,7 +3879,7 @@ pmap_remove(pmap_t pmap, vm_offset_t sva, vm_offset_t eva)
 		 */
 		if (ptpaddr & PG_SHAREPT) {
 			pte_clear(pde);
-			pmap_invalidate_range(pmap, sva, va_next);
+			anyvalid = 1;
 			pmap_resident_count_dec(pmap, 1);
 			vm_page_t pdpg = PHYS_TO_VM_PAGE(*pdpe & PG_FRAME);
 			pmap_unwire_ptp(pmap, sva, pdpg, &free);
