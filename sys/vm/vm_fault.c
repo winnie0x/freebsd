@@ -391,13 +391,13 @@ RetryFault:;
 			if ((m->flags & PG_FICTITIOUS) == 0 &&
 			    (m_super = vm_reserv_to_superpage(m)) != NULL &&
 			    rounddown2(vaddr, pagesizes[m_super->psind]) >=
-			    fs->entry->start &&
+			    fs.entry->start &&
 			    roundup2(vaddr + 1, pagesizes[m_super->psind]) <=
-			    fs->entry->end &&
+			    fs.entry->end &&
 			    (vaddr & (pagesizes[m_super->psind] - 1)) ==
 			    (VM_PAGE_TO_PHYS(m) &
 			    (pagesizes[m_super->psind] - 1)) &&
-			    pmap_ps_enabled(fs->map->pmap)) {
+			    pmap_ps_enabled(fs.map->pmap)) {
 				flags = PS_ALL_VALID;
 				if ((prot & VM_PROT_WRITE) != 0) {
 					/*
@@ -409,7 +409,7 @@ RetryFault:;
 					 * faulted on).
 					 */
 					flags |= PS_NONE_BUSY;
-					if ((fs->first_object->flags &
+					if ((fs.first_object->flags &
 					    OBJ_UNMANAGED) == 0)
 						flags |= PS_ALL_DIRTY;
 				}
