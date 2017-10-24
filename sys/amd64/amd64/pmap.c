@@ -4797,7 +4797,7 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 			 */
 			(void)pmap_remove_pde(pmap, pde, va, &free, lockp);
 			if ((oldpde & PG_G) == 0)
-				pmap_invalidate_pde_page(pmap, va, oldpde);
+				pmap_invalidate_page(pmap, va);
 		} else {
 			pmap_delayed_invl_started();
 			if (pmap_remove_ptes(pmap, va, va + NBPDR, pde, &free,
