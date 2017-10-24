@@ -385,47 +385,44 @@ RetryFault:;
 		if (m == NULL || ((prot & VM_PROT_WRITE) != 0 &&
 		    vm_page_busied(m)) || m->valid != VM_PAGE_BITS_ALL)
 			goto fast_failed;
-			m_map = m;
-			psind = 0;
+		m_map = m;
+		psind = 0;
 #if defined(__amd64__) && VM_NRESERVLEVEL > 0
-			if ((m->flags & PG_FICTITIOUS) == 0 &&
-			    (m_super = vm_reserv_to_superpage(m)) != NULL &&
-			    rounddown2(vaddr, pagesizes[m_super->psind]) >=
-			    fs.entry->start &&
-			    roundup2(vaddr + 1, pagesizes[m_super->psind]) <=
-			    fs.entry->end &&
-			    (vaddr & (pagesizes[m_super->psind] - 1)) ==
-			    (VM_PAGE_TO_PHYS(m) &
-			    (pagesizes[m_super->psind] - 1)) &&
-			    pmap_ps_enabled(fs.map->pmap)) {
-				flags = PS_ALL_VALID;
-				if ((prot & VM_PROT_WRITE) != 0) {
-					/*
-					 * Create a superpage mapping allowing
-					 * write access only if none of the
-					 * constituent pages are busy and all
-					 * of them are already dirty (except
-					 * possibly for the page that was
-					 * faulted on).
-					 */
-					flags |= PS_NONE_BUSY;
-					if ((fs.first_object->flags &
-					    OBJ_UNMANAGED) == 0)
-						flags |= PS_ALL_DIRTY;
-				}
-				if (vm_page_ps_test(m_super, flags, m)) {
-					m_map = m_super;
-					psind = m_super->psind;
-					vaddr = rounddown2(vaddr,
-					    pagesizes[psind]);
-					/*
-					 * Preset the modified bit for dirty
-					 * superpages.
-					 */
-					if ((flags & PS_ALL_DIRTY) != 0)
-						fault_type |= VM_PROT_WRITE;
-				}
+		if ((m->flags & PG_FICTITIOUS) == 0 &&
+		    (m_super = vm_reserv_to_superpage(m)) != NULL &&
+		    rounddown2(vaddr, pagesizes[m_super->psind]) >=
+		    fs.entry->start &&
+		    roundup2(vaddr + 1, pagesizes[m_super->psind]) <=
+		    fs.entry->end &&
+		    (vaddr & (pagesizes[m_super->psind] - 1)) ==
+		    (VM_PAGE_TO_PHYS(m) & (pagesizes[m_super->psind] - 1)) &&
+		    pmap_ps_enabled(fs.map->pmap)) {
+			flags = PS_ALL_VALID;
+			if ((prot & VM_PROT_WRITE) != 0) {
+				/*
+				 * Create a superpage mapping allowing write
+				 * access only if none of the constituent pages
+				 * are busy and all of them are already dirty
+				 * (except possibly for the page that was
+				 * faulted on).
+				 */
+				flags |= PS_NONE_BUSY;
+				if ((fs.first_object->flags & OBJ_UNMANAGED) ==
+				    0)
+					flags |= PS_ALL_DIRTY;
 			}
+			if (vm_page_ps_test(m_super, flags, m)) {
+				m_map = m_super;
+				psind = m_super->psind;
+				vaddr = rounddown2(vaddr, pagesizes[psind]);
+				/*
+				 * Preset the modified bit for dirty
+				 * superpages.
+				 */
+				if ((flags & PS_ALL_DIRTY) != 0)
+					fault_type |= VM_PROT_WRITE;
+			}
+		}
 #endif
 		result = pmap_enter(fs.map->pmap, vaddr, m_map, prot,
 		    fault_type | PMAP_ENTER_NOSLEEP |
