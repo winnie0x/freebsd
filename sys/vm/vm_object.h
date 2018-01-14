@@ -67,12 +67,17 @@
 #ifndef	_VM_OBJECT_
 #define	_VM_OBJECT_
 
+#include <sys/types.h>
+#include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/_lock.h>
 #include <sys/_mutex.h>
 #include <sys/_rwlock.h>
 
+#include <vm/pmap.h>
 #include <vm/_vm_radix.h>
+
+MALLOC_DECLARE(M_VMOBJECT);
 
 /*
  *	Types defined:
@@ -119,6 +124,7 @@ struct vm_object {
 	TAILQ_ENTRY(vm_object) pager_object_list; /* list of all objects of this pager type */
 	LIST_HEAD(, vm_reserv) rvq;	/* list of reservations */
 	struct vm_radix cache;		/* (o + f) root of the cache page radix trie */
+	pmap_t pt_pmap;			/* Pseudo-pmap managing shared page table pages. */
 	void *handle;
 	union {
 		/*

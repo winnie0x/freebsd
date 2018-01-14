@@ -143,6 +143,8 @@ struct vm_map_entry {
 #define	MAP_ENTRY_WIRE_SKIPPED		0x4000
 #define	MAP_ENTRY_VN_WRITECNT		0x8000	/* writeable vnode mapping */
 
+#define	MAP_ENTRY_SHAREPT		0x10000
+
 #ifdef	_KERNEL
 static __inline u_char
 vm_map_entry_behavior(vm_map_entry_t entry)
@@ -322,6 +324,7 @@ long vmspace_resident_count(struct vmspace *vmspace);
 #define	MAP_STACK_GROWS_UP	0x2000
 #define	MAP_ACC_CHARGED		0x4000
 #define	MAP_ACC_NO_CHARGE	0x8000
+#define	MAP_TRY_SHARE_PT	0x10000
 
 /*
  * vm_fault option flags

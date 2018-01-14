@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -191,7 +192,8 @@ map_object(int fd, const char *path, const struct stat *sb)
     mapsize = base_vlimit - base_vaddr;
     base_addr = (caddr_t) base_vaddr;
     base_flags = MAP_PRIVATE | MAP_ANON | MAP_NOCORE;
-    if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1])
+    /* if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1]) */
+    if (npagesizes > 1)
 	base_flags |= MAP_ALIGNED_SUPER;
 
     mapbase = mmap(base_addr, mapsize, PROT_NONE, base_flags, -1, 0);
@@ -215,7 +217,9 @@ map_object(int fd, const char *path, const struct stat *sb)
 	data_prot = convert_prot(segs[i]->p_flags);
 	data_flags = convert_flags(segs[i]->p_flags) | MAP_FIXED;
 	if (mmap(data_addr, data_vlimit - data_vaddr, data_prot,
-	  data_flags | MAP_PREFAULT_READ, fd, data_offset) == (caddr_t) -1) {
+	  data_flags | MAP_PREFAULT_READ |
+	  ((data_prot & PROT_WRITE) ? 0 : MAP_SHAREPT),
+	  fd, data_offset) == (caddr_t) -1) {
 	    _rtld_error("%s: mmap of data failed: %s", path,
 		rtld_strerror(errno));
 	    goto error1;

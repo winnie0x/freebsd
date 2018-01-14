@@ -239,7 +239,7 @@ sys_mmap(td, uap)
 	}
 	if ((flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_HASSEMAPHORE |
 	    MAP_STACK | MAP_NOSYNC | MAP_ANON | MAP_EXCL | MAP_NOCORE |
-	    MAP_PREFAULT_READ |
+	    MAP_PREFAULT_READ | MAP_SHAREPT |
 #ifdef MAP_32BIT
 	    MAP_32BIT |
 #endif
@@ -1555,6 +1555,8 @@ vm_mmap_object(vm_map_t map, vm_offset_t *addr, vm_size_t size, vm_prot_t prot,
 	}
 	if ((flags & MAP_EXCL) != 0)
 		docow |= MAP_CHECK_EXCL;
+	if (flags & MAP_SHAREPT)
+		docow |= MAP_TRY_SHARE_PT;
 
 	if (fitit) {
 		if ((flags & MAP_ALIGNMENT_MASK) == MAP_ALIGNED_SUPER)
