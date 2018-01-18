@@ -7613,8 +7613,16 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 		u_long cr3 = rcr3();
 		if ((cr3 & (1ul<<63)) == (1ul<<63))
 			printf("bit 63 of CR3 set, so no invalidation\n");
-		else
+		else {
 			printf("bit 63 of CR3 not set, will flush ...\n");
+			printf("now test writing to CR3 with bit 63 set\n");
+			load_cr3(cr3 | (1ul<<63));
+			u_long new_cr3 = rcr3();
+			if ((new_cr3 & (1ul<<63)) == (1ul<<63))
+				printf("bit 63 not cleared immediately after write\n");
+			else
+				printf("bit 63 cleared immediately after write\n");
+		}
 		uint64_t pm_cr3 = curthread->td_proc->p_vmspace->vm_pmap.pm_cr3;
 		printf("pmap->pm_cr3 = 0x%lx\n", pm_cr3);
 	}
