@@ -7605,11 +7605,18 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 		return (error);
 	}
 	if (i) {
-		printf("Reloading CR3\n");
+		printf("reloading CR3\n");
 		for (int i = 0; i < 1000000; i++) {
 			load_cr3(rcr3());
 		}
-		// TODO Check the hard flush bit.
+
+		u_long cr3 = rcr3();
+		if ((cr3 & (1ul<<63)) == (1ul<<63))
+			printf("bit 63 of CR3 set, so no invalidation\n");
+		else
+			printf("bit 63 of CR3 not set, will flush ...\n");
+		uint64_t pm_cr3 = pmap->pm_cr3;
+		printf("pmap->pm_cr3 = 0x%lx\n", pm_cr3);
 	}
 	return (0);
 }
@@ -7629,7 +7636,7 @@ debug_pcid(SYSCTL_HANDLER_ARGS)
 		return (error);
 	}
 	if (i) {
-		printf("CR4.PCIDE=%lx\n", (unsigned long)CR4_PCIDE);
+		printf("CR4.PCIDE=0x%lx\n", (unsigned long)CR4_PCIDE);
 		if ((rcr4() & CR4_PCIDE) == CR4_PCIDE)
 			printf("CR4.PCIDE is set\n");
 		else
