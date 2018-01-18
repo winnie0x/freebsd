@@ -7589,3 +7589,53 @@ DB_SHOW_COMMAND(phys2dmap, pmap_phys2dmap)
 	}
 }
 #endif
+
+/*
+ * Investigating ITLB_FLUSH.
+ */
+static int
+debug_cr3_reload(SYSCTL_HANDLER_ARGS)
+{
+	int error, i;
+
+	i = 0;
+	error = sysctl_handle_int(oidp, &i, 0, req);
+	if (error) {
+		printf("%s: sysctl_handle_int error %d\n", __func__, error);
+		return (error);
+	}
+	if (i) {
+		for (int i = 0; i < 1000; i++) {
+			load_cr3(rcr3());
+		}
+		// TODO Check the hard flush bit.
+	}
+	return (0);
+}
+
+SYSCTL_PROC(_debug, OID_AUTO, reload_cr3, CTLTYPE_INT | CTLFLAG_RW, 0, 0,
+    debug_cr3_reload, "I", "set to trigger a bunch of CR3 reloads");
+
+static int
+debug_pcid(SYSCTL_HANDLER_ARGS)
+{
+	int error, i;
+
+	i = 0;
+	error = sysctl_handle_int(oidp, &i, 0, req);
+	if (error) {
+		printf("%s: sysctl_handle_int error %d\n", __func__, error);
+		return (error);
+	}
+	if (i) {
+		printf("CR4.PCIDE=%lx\n", (unsigned long)CR4_PCIDE);
+		if ((rcr4() & CR4_PCIDE) == CR4_PCIDE)
+			printf("CR4.PCIDE is set\n");
+		else
+			printf("CR4.PCIDE is not set\n");
+	}
+	return (0);
+}
+
+SYSCTL_PROC(_debug, OID_AUTO, pcid, CTLTYPE_INT | CTLFLAG_RW, 0, 0,
+    debug_pcid, "I", "set to inspect CR4.PCIDE value");
