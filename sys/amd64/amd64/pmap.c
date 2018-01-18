@@ -7615,7 +7615,7 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 			printf("bit 63 of CR3 set, so no invalidation\n");
 		else
 			printf("bit 63 of CR3 not set, will flush ...\n");
-		uint64_t pm_cr3 = pmap->pm_cr3;
+		uint64_t pm_cr3 = curthread->td_proc->p_vmspace->vm_pmap.pm_cr3;
 		printf("pmap->pm_cr3 = 0x%lx\n", pm_cr3);
 	}
 	return (0);
