@@ -7605,6 +7605,7 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 		return (error);
 	}
 	if (i) {
+		printf("Reloading CR3\n");
 		for (int i = 0; i < 1000000; i++) {
 			load_cr3(rcr3());
 		}
@@ -7637,5 +7638,5 @@ debug_pcid(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
-SYSCTL_PROC(_debug, OID_AUTO, pcid, CTLTYPE_INT | CTLFLAG_RW, 0, sizeof(int),
+SYSCTL_PROC(_debug, OID_AUTO, pcid, CTLTYPE_INT | CTLFLAG_RW, 0, 0,
     debug_pcid, "I", "set to inspect CR4.PCIDE value");
