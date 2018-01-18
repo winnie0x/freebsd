@@ -7605,7 +7605,7 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 		return (error);
 	}
 	if (i) {
-		for (int i = 0; i < 1000; i++) {
+		for (int i = 0; i < 1000000; i++) {
 			load_cr3(rcr3());
 		}
 		// TODO Check the hard flush bit.
@@ -7637,5 +7637,5 @@ debug_pcid(SYSCTL_HANDLER_ARGS)
 	return (0);
 }
 
-SYSCTL_PROC(_debug, OID_AUTO, pcid, CTLTYPE_INT | CTLFLAG_RW, 0, 0,
+SYSCTL_PROC(_debug, OID_AUTO, pcid, CTLTYPE_INT | CTLFLAG_RW, 0, sizeof(int),
     debug_pcid, "I", "set to inspect CR4.PCIDE value");
