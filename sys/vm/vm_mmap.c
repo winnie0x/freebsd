@@ -253,6 +253,8 @@ sys_mmap(td, uap)
 	    (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
 		return (EINVAL);
 
+	flags &= ~MAP_SHAREPT;
+
 	/*
 	 * Align the file position to a page boundary,
 	 * and save its page offset component.

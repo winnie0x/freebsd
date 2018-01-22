@@ -538,9 +538,6 @@ __elfN(load_section)(struct image_params *imgp, vm_offset_t offset,
 		/* cow flags: don't dump readonly sections in core */
 		cow = MAP_COPY_ON_WRITE | MAP_PREFAULT |
 		    (prot & VM_PROT_WRITE ? 0 : MAP_DISABLE_COREDUMP);
-		/* TODO NBPDR might not be defined on some architecture. */
-		if ((prot & VM_PROT_WRITE) == 0 && map_len >= NBPDR)
-			cow |= MAP_TRY_SHARE_PT;
 
 		rv = __elfN(map_insert)(map,
 				      object,
