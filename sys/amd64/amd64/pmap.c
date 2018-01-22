@@ -7607,7 +7607,7 @@ debug_cr3_reload(SYSCTL_HANDLER_ARGS)
 	if (i) {
 		printf("reloading CR3\n");
 		for (int i = 0; i < 1000000; i++) {
-			load_cr3(rcr3());
+			load_cr3(rcr3() | (1ul<<63));
 		}
 
 		u_long cr3 = rcr3();
