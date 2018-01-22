@@ -4767,6 +4767,7 @@ void
 pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
     vm_page_t m_start, vm_prot_t prot)
 {
+	printf("%s: start 0x%lx end 0x%lx prot 0x%x\n", __func__, start, end, prot);
 	struct rwlock *lock;
 	vm_offset_t va;
 	vm_page_t m, mpte;
