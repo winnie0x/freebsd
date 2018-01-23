@@ -1,0 +1,21 @@
+chflags -h noschg /usr/libexec/ld-elf.so.1
+install  -s -o root -g wheel -m 555  -C -b -fschg -S ld-elf.so.1 /libexec/ld-elf.so.1
+install  -o root -g wheel -m 444  ld-elf.so.1.debug /usr/lib/debug/libexec/ld-elf.so.1.debug
+install  -o root -g wheel -m 444 rtld.1.gz  /usr/share/man/man1/
+rm -f /usr/share/man/man1/ld-elf.so.1.1 /usr/share/man/man1/ld-elf.so.1.1.gz;  install -l h  /usr/share/man/man1/rtld.1.gz /usr/share/man/man1/ld-elf.so.1.1.gz
+rm -f /usr/share/man/man1/ld.so.1 /usr/share/man/man1/ld.so.1.gz;  install -l h  /usr/share/man/man1/rtld.1.gz /usr/share/man/man1/ld.so.1.gz
+===> tests (install)
+install  -o root  -g wheel -m 444  Kyuafile  /usr/tests/libexec/rtld-elf/Kyuafile
+===> tests/libpythagoras (install)
+install  -C -o root -g wheel -m 444   libpythagoras.a /usr/tests/libexec/rtld-elf/
+install  -C -o root -g wheel -m 444   libpythagoras_p.a /usr/tests/libexec/rtld-elf/
+install  -s -o root -g wheel -m 444     libpythagoras.so.0 /usr/tests/libexec/rtld-elf/
+install  -o root -g wheel -m 444    libpythagoras.so.0.debug /usr/lib/debug/usr/tests/libexec/rtld-elf/
+install -l rs  libpythagoras.so.0 /usr/tests/libexec/rtld-elf/libpythagoras.so
+===> tests/target (install)
+install  -s -o root -g wheel -m 555   target /usr/tests/libexec/rtld-elf/target
+install  -o root -g wheel -m 444  target.debug /usr/lib/debug/usr/tests/libexec/rtld-elf/target.debug
+(cd /root/yz70/freebsd/libexec/rtld-elf/tests &&  DEPENDFILE=.depend.ld_library_pathfds  NO_SUBDIR=1 make -f Makefile _RECURSING_PROGS=t  PROG=ld_library_pathfds  install)
+install  -s -o root -g wheel -m 555   ld_library_pathfds /usr/tests/libexec/rtld-elf/ld_library_pathfds
+install  -o root -g wheel -m 444  ld_library_pathfds.debug /usr/lib/debug/usr/tests/libexec/rtld-elf/ld_library_pathfds.debug
+/usr/libexec/ld-elf.so.1 -> /libexec/ld-elf.so.1
