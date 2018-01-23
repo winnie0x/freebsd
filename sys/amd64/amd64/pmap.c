@@ -6316,6 +6316,11 @@ small_mappings:
 		KASSERT((*pde & PG_PS) == 0,
 		    ("pmap_ts_referenced: found a 2mpage in page %p's pv list",
 		    m));
+		if (*pde & PG_SHAREPT) {
+			cleared = 0;
+			not_cleared = 1;
+			goto out;
+		}
 		pte = pmap_pde_to_pte(pde, pv->pv_va);
 		if ((*pte & PG_A) != 0) {
 			if (safe_to_clear_referenced(pmap, *pte)) {
