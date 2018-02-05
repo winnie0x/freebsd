@@ -4361,6 +4361,54 @@ setpte:
 	    " in pmap %p", va, pmap);
 }
 
+static boolean_t
+pmap_check_pv_list(pmap_t pmap)
+{
+	pd_entry_t ptepde;
+	pt_entry_t *pte, tpte;
+	pt_entry_t PG_V;
+	pv_entry_t pv;
+	struct pv_chunk *pc, *npc;
+	int64_t bit;
+	uint64_t inuse, bitmask;
+	int field, idx;
+
+	PG_V = pmap_valid_bit(pmap);
+
+	TAILQ_FOREACH_SAFE(pc, &pmap->pm_pvchunk, pc_list, npc) {
+		for (field = 0; field < _NPCM; field++) {
+			inuse = ~pc->pc_map[field] & pc_freemask[field];
+			while (inuse != 0) {
+				bit = bsfq(inuse);
+				bitmask = 1UL << bit;
+				idx = field * 64 + bit;
+				pv = &pc->pc_pventry[idx];
+				inuse &= ~bitmask;
+
+				pte = pmap_pdpe(pmap, pv->pv_va);
+				ptepde = *pte;
+				pte = pmap_pdpe_to_pde(pte, pv->pv_va);
+				tpte = *pte;
+				if ((tpte & (PG_PS | PG_V)) == PG_V) {
+					ptepde = tpte;
+					pte = (pt_entry_t *)PHYS_TO_DMAP(tpte &
+					    PG_FRAME);
+					pte = &pte[pmap_pte_index(pv->pv_va)];
+					tpte = *pte;
+				}
+
+				if ((tpte & PG_V) == 0) {
+					printf("bad pte va %lx pte %lx",
+					    pv->pv_va, tpte);
+					return (FALSE);
+				}
+			}
+		}
+	}
+
+	return (TRUE);
+}
+
 /*
  *	Insert the given physical page (p) at
  *	the specified virtual address (v) in the
@@ -4697,6 +4745,9 @@ unchanged:
 out:
 	if (lock != NULL)
 		rw_wunlock(lock);
+	if (!pmap_check_pv_list(pmap)) {
+		panic("%s failed pmap_check_pv_list", __func__);
+	}
 	PMAP_UNLOCK(pmap);
 	return (rv);
 }
@@ -4772,6 +4823,9 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 	    NULL : lockp)) == NULL) {
 		CTR2(KTR_PMAP, "pmap_enter_pde: failure for va %#lx"
 		    " in pmap %p", va, pmap);
+		if (!pmap_check_pv_list(pmap)) {
+			panic("%s failed pmap_check_pv_list", __func__);
+		}
 		return (KERN_RESOURCE_SHORTAGE);
 	}
 	pde = (pd_entry_t *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(pdpg));
@@ -4784,6 +4838,9 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 			pdpg->wire_count--;
 			CTR2(KTR_PMAP, "pmap_enter_pde: failure for va %#lx"
 			    " in pmap %p", va, pmap);
+			if (!pmap_check_pv_list(pmap)) {
+				panic("%s failed pmap_check_pv_list", __func__);
+			}
 			return (KERN_FAILURE);
 		}
 		/* Break the existing mapping(s). */
@@ -4838,6 +4895,9 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 			}
 			CTR2(KTR_PMAP, "pmap_enter_pde: failure for va %#lx"
 			    " in pmap %p", va, pmap);
+			if (!pmap_check_pv_list(pmap)) {
+				panic("%s failed pmap_check_pv_list", __func__);
+			}
 			return (KERN_RESOURCE_SHORTAGE);
 		}
 		if ((newpde & PG_RW) != 0) {
@@ -4861,6 +4921,9 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 	atomic_add_long(&pmap_pde_mappings, 1);
 	CTR2(KTR_PMAP, "pmap_enter_pde: success for va %#lx"
 	    " in pmap %p", va, pmap);
+	if (!pmap_check_pv_list(pmap)) {
+		panic("%s failed pmap_check_pv_list", __func__);
+	}
 	return (KERN_SUCCESS);
 }
 
@@ -4939,6 +5002,9 @@ pmap_enter_object(pmap_t pmap, vm_offset_t start, vm_offset_t end,
 
 	if (lock != NULL)
 		rw_wunlock(lock);
+	if (!pmap_check_pv_list(pmap)) {
+		panic("%s failed pmap_check_pv_list", __func__);
+	}
 	PMAP_UNLOCK(pmap);
 }
 
