@@ -1236,6 +1236,8 @@ vm_map_insert(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 		protoeflags |= MAP_ENTRY_STACK_GAP_DN;
 	if ((cow & MAP_CREATE_STACK_GAP_UP) != 0)
 		protoeflags |= MAP_ENTRY_STACK_GAP_UP;
+	if (cow & MAP_TRY_SHARE_PT)
+		protoeflags |= MAP_ENTRY_SHAREPT;
 	if (cow & MAP_INHERIT_SHARE)
 		inheritance = VM_INHERIT_SHARE;
 	else
@@ -1358,8 +1360,9 @@ charged:
 	vm_map_simplify_entry(map, new_entry);
 
 	if ((cow & (MAP_PREFAULT | MAP_PREFAULT_PARTIAL)) != 0) {
-		vm_map_pmap_enter(map, start, prot, object, OFF_TO_IDX(offset),
-		    end - start, cow & MAP_PREFAULT_PARTIAL);
+		vm_map_pmap_enter(map, start, prot,
+		    object, OFF_TO_IDX(offset), end - start,
+		    cow & (MAP_PREFAULT_PARTIAL | MAP_TRY_SHARE_PT));
 	}
 
 	return (KERN_SUCCESS);
@@ -1524,7 +1527,8 @@ again:
 			case VMFS_SUPER_SPACE:
 			case VMFS_OPTIMAL_SPACE:
 				pmap_align_superpage(object, offset, addr,
-				    length);
+				    length,
+				    (cow & MAP_TRY_SHARE_PT) ? FALSE : TRUE);
 				break;
 			case VMFS_ANY_SPACE:
 				break;
@@ -1976,13 +1980,16 @@ vm_map_pmap_enter(vm_map_t map, vm_offset_t addr, vm_prot_t prot,
 			}
 		} else if (p_start != NULL) {
 			pmap_enter_object(map->pmap, start, addr +
-			    ptoa(tmpidx), p_start, prot);
+			    ptoa(tmpidx), p_start,
+			    prot | ((flags & MAP_TRY_SHARE_PT) ?
+			    VM_PROT_SHAREPT : prot));
 			p_start = NULL;
 		}
 	}
 	if (p_start != NULL)
 		pmap_enter_object(map->pmap, start, addr + ptoa(psize),
-		    p_start, prot);
+		    p_start, prot | ((flags & MAP_TRY_SHARE_PT) ?
+		    VM_PROT_SHAREPT : prot));
 	VM_OBJECT_RUNLOCK(object);
 }
 
@@ -2038,6 +2045,24 @@ vm_map_protect(vm_map_t map, vm_offset_t start, vm_offset_t end,
 			vm_map_unlock(map);
 			return (KERN_PROTECTION_FAILURE);
 		}
+		if (current->eflags & MAP_ENTRY_SHAREPT) {
+			old_prot = current->protection;
+			if (old_prot !=
+			    (set_max ? (old_prot & new_prot) : new_prot)) {
+				/*
+				 * TODO The flag indicates our "intention" to
+				 * share PT.  It is possible that this process
+				 * is not actually sharing PT with anyone.
+				 * Perhaps let pmap provide a helper function
+				 * that checks for the PG_SHAREPT bit?
+				 * Eventually we might wanna get rid of the
+				 * "intention" bit and just keep a "fact" bit?
+				 */
+				printf("Changes requested on shared pt\n");
+				return (KERN_PROTECTION_FAILURE);
+			}
+		}
+		current = current->next;
 	}
 
 	/*

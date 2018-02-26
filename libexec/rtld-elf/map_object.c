@@ -31,6 +31,7 @@
 
 #include <errno.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -195,7 +196,8 @@ map_object(int fd, const char *path, const struct stat *sb)
     base_flags = __getosreldate() >= P_OSREL_MAP_GUARD ||
       (P_OSREL_MAJOR(__getosreldate()) == 11 && __getosreldate() >=
       P_OSREL_MAP_GUARD_11) ? MAP_GUARD : MAP_PRIVATE | MAP_ANON | MAP_NOCORE;
-    if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1])
+    /* if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1]) */
+    if (npagesizes > 1)
 	base_flags |= MAP_ALIGNED_SUPER;
     if (base_vaddr != 0)
 	base_flags |= MAP_FIXED | MAP_EXCL;
@@ -221,7 +223,9 @@ map_object(int fd, const char *path, const struct stat *sb)
 	data_prot = convert_prot(segs[i]->p_flags);
 	data_flags = convert_flags(segs[i]->p_flags) | MAP_FIXED;
 	if (mmap(data_addr, data_vlimit - data_vaddr, data_prot,
-	  data_flags | MAP_PREFAULT_READ, fd, data_offset) == (caddr_t) -1) {
+	  data_flags | MAP_PREFAULT_READ |
+	  ((data_prot & PROT_WRITE) ? 0 : MAP_SHAREPT),
+	  fd, data_offset) == (caddr_t) -1) {
 	    _rtld_error("%s: mmap of data failed: %s", path,
 		rtld_strerror(errno));
 	    goto error1;
