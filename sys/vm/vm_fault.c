@@ -314,7 +314,7 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 #endif
 	rv = pmap_enter(fs->map->pmap, vaddr, m_map, prot, fault_type |
 	    PMAP_ENTER_NOSLEEP | (wired ? PMAP_ENTER_WIRED : 0) |
-	    ((fs.entry->eflags & MAP_ENTRY_SHAREPT) ? PMAP_ENTER_SHAREPT : 0),
+	    ((fs->entry->eflags & MAP_ENTRY_SHAREPT) ? PMAP_ENTER_SHAREPT : 0),
 	    psind);
 	if (rv != KERN_SUCCESS)
 		return (rv);
