@@ -4487,8 +4487,10 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 		if ((prot & VM_PROT_WRITE) != 0)
 			panic("VM_PROT_WRITE not implemented for sharept");
 		if (((va & PDRMASK) >> PAGE_SHIFT) !=
-		    (m->pindex & (NPTEPG - 1)))
+		    (m->pindex & (NPTEPG - 1))) {
+			printf("Failed ((va & PDRMASK) >> PAGE_SHIFT) == (m->pindex & (NPTEPG - 1)) check in pmap_enter\n");
 			flags &= ~PMAP_ENTER_SHAREPT;
+		}
 	}
 
 	PG_A = pmap_accessed_bit(pmap);
@@ -4615,6 +4617,7 @@ allocpte:
 			goto out;
 		}
 		if (copypt) {
+			printf("Executing copypt stuff in pmap_enter\n");
 			memcpy((void *)PHYS_TO_DMAP(VM_PAGE_TO_PHYS(mpte)),
 			    (void *)PHYS_TO_DMAP(origpde & PG_FRAME),
 			    PAGE_SIZE);
