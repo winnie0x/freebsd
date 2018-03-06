@@ -567,8 +567,8 @@ __elfN(load_section)(struct image_params *imgp, vm_ooffset_t offset,
 		cow = MAP_COPY_ON_WRITE | MAP_PREFAULT |
 		    (prot & VM_PROT_WRITE ? 0 : MAP_DISABLE_COREDUMP);
 		/* TODO NBPDR might not be defined on some architecture. */
-		if ((prot & VM_PROT_WRITE) == 0 && map_len >= NBPDR)
-			cow |= MAP_TRY_SHARE_PT;
+		//if ((prot & VM_PROT_WRITE) == 0 && map_len >= NBPDR)
+			//cow |= MAP_TRY_SHARE_PT;
 
 		rv = __elfN(map_insert)(imgp, map,
 				      object,

@@ -198,6 +198,8 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 	 * Ignore old flags that used to be defined but did not do anything.
 	 */
 	flags &= ~(MAP_RESERVED0020 | MAP_RESERVED0040);
+
+	flags &= ~MAP_SHAREPT;
 	
 	/*
 	 * Enforce the constraints.
