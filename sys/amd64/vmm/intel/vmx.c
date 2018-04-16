@@ -2431,6 +2431,22 @@ vmx_exit_process(struct vmx *vmx, int vcpu, struct vm_exit *vmexit)
 			vmexit->inst_length = 0;
 			vmexit->u.paging.gpa = gpa;
 			vmexit->u.paging.fault_type = ept_fault_type(qual);
+			switch (vmexit->u.paging.fault_type) {
+				case VM_PROT_READ:
+					vmm_stat_incr(vmx->vm, vcpu,
+					    VMEXIT_NESTED_FAULT_READ, 1);
+					break;
+				case VM_PROT_WRITE:
+					vmm_stat_incr(vmx->vm, vcpu,
+					    VMEXIT_NESTED_FAULT_WRITE, 1);
+					break;
+				case VM_PROT_EXECUTE:
+					vmm_stat_incr(vmx->vm, vcpu,
+					    VMEXIT_NESTED_FAULT_EXEC, 1);
+					break;
+				default:
+					break;
+			}
 			vmm_stat_incr(vmx->vm, vcpu, VMEXIT_NESTED_FAULT, 1);
 		} else if (ept_emulation_fault(qual)) {
 			vmexit_inst_emul(vmexit, gpa, vmcs_gla());

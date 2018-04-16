@@ -1322,6 +1322,10 @@ vm_handle_hlt(struct vm *vm, int vcpuid, bool intr_disabled, bool *retu)
 	return (0);
 }
 
+#define	EXEC_PROACTIVE_SHIFT	(PAGE_SHIFT + 6)
+#define	EXEC_PROACTIVE_SIZE	(1 << EXEC_PROACTIVE_SHIFT)
+#define	EXEC_PROACTIVE_MASK	(EXEC_PROACTIVE_SIZE - 1)
+
 static int
 vm_handle_paging(struct vm *vm, int vcpuid, bool *retu)
 {
@@ -1329,6 +1333,7 @@ vm_handle_paging(struct vm *vm, int vcpuid, bool *retu)
 	struct vm_map *map;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
+	vm_offset_t gpa, i;
 
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
@@ -1353,6 +1358,10 @@ vm_handle_paging(struct vm *vm, int vcpuid, bool *retu)
 	}
 
 	map = &vm->vmspace->vm_map;
+	/*
+	 * TODO VM_FAULT_NORMAL only if ftype == VM_PROT_EXECUTE;
+	 * otherwise special flag to request the absence of PG_U.
+	 */
 	rv = vm_fault(map, vme->u.paging.gpa, ftype, VM_FAULT_NORMAL);
 
 	VCPU_CTR3(vm, vcpuid, "vm_handle_paging rv = %d, gpa = %#lx, "
@@ -1360,6 +1369,17 @@ vm_handle_paging(struct vm *vm, int vcpuid, bool *retu)
 
 	if (rv != KERN_SUCCESS)
 		return (EFAULT);
+
+	if (ftype == VM_PROT_EXECUTE) {
+		for (i = 0, gpa = (vme->u.paging.gpa & ~EXEC_PROACTIVE_MASK) +
+		    (vme->u.paging.gpa & PAGE_MASK);
+		    i < EXEC_PROACTIVE_SIZE;
+		    i += PAGE_SIZE, gpa += PAGE_SIZE) {
+			if (gpa != vme->u.paging.gpa) {
+				vm_fault(map, gpa, ftype, VM_FAULT_NORMAL);
+			}
+		}
+	}
 done:
 	return (0);
 }
