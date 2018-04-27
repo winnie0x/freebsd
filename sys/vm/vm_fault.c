@@ -1247,7 +1247,8 @@ readrest:
 	 * won't find it (yet).
 	 */
 	pmap_enter(fs.map->pmap, vaddr, fs.m, prot,
-	    fault_type | (wired ? PMAP_ENTER_WIRED : 0), 0);
+	    fault_type | (wired ? PMAP_ENTER_WIRED : 0) |
+	    ((fault_flags & VM_FAULT_VMM) ? PMAP_ENTER_NO_U : 0), 0);
 	if (faultcount != 1 && (fault_flags & VM_FAULT_WIRE) == 0 &&
 	    wired == 0)
 		vm_fault_prefault(&fs, vaddr,

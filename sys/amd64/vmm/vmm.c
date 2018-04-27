@@ -1358,11 +1358,8 @@ vm_handle_paging(struct vm *vm, int vcpuid, bool *retu)
 	}
 
 	map = &vm->vmspace->vm_map;
-	/*
-	 * TODO VM_FAULT_NORMAL only if ftype == VM_PROT_EXECUTE;
-	 * otherwise special flag to request the absence of PG_U.
-	 */
-	rv = vm_fault(map, vme->u.paging.gpa, ftype, VM_FAULT_NORMAL);
+	rv = vm_fault(map, vme->u.paging.gpa, ftype,
+	    ftype == VM_PROT_EXECUTE ? VM_FAULT_NORMAL : VM_FAULT_VMM);
 
 	VCPU_CTR3(vm, vcpuid, "vm_handle_paging rv = %d, gpa = %#lx, "
 	    "ftype = %d", rv, vme->u.paging.gpa, ftype);

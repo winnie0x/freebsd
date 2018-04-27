@@ -337,6 +337,7 @@ long vmspace_resident_count(struct vmspace *vmspace);
 #define	VM_FAULT_NORMAL	0		/* Nothing special */
 #define	VM_FAULT_WIRE	1		/* Wire the mapped page */
 #define	VM_FAULT_DIRTY	2		/* Dirty the page; use w/VM_PROT_COPY */
+#define	VM_FAULT_VMM	4		/* vm_fault from a vmm */
 
 /*
  * Initially, mappings are slightly sequential.  The maximum window size must

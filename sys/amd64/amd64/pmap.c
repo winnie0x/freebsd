@@ -4469,7 +4469,7 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 		newpte |= pg_nx;
 	if ((flags & PMAP_ENTER_WIRED) != 0)
 		newpte |= PG_W;
-	if (va < VM_MAXUSER_ADDRESS)
+	if (va < VM_MAXUSER_ADDRESS && (flags & PMAP_ENTER_NO_U) == 0)
 		newpte |= PG_U;
 	if (pmap == kernel_pmap)
 		newpte |= PG_G;
