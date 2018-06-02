@@ -2371,8 +2371,8 @@ pmap_pinit0(pmap_t pmap)
 	bzero(&pmap->pm_stats, sizeof pmap->pm_stats);
 	pmap->pm_flags = pmap_flags;
 	CPU_FOREACH(i) {
-		pmap->pm_pcids[i].pm_pcid = PMAP_PCID_NONE;
-		pmap->pm_pcids[i].pm_gen = 0;
+		pmap->pm_pcids[i].pm_pcid = PMAP_PCID_KERN;
+		pmap->pm_pcids[i].pm_gen = 1;
 	}
 	PCPU_SET(curpmap, kernel_pmap);
 	pmap_activate(curthread);
