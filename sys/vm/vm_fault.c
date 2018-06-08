@@ -319,8 +319,8 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 	vm_fault_fill_hold(m_hold, m);
 	vm_fault_dirty(fs->entry, m, prot, fault_type, fault_flags, false);
 	VM_OBJECT_RUNLOCK(fs->first_object);
-	if (psind == 0 && !wired)
-		vm_fault_prefault(fs, vaddr, PFBAK, PFFOR);
+	/* if (psind == 0 && !wired) */
+	/* 	vm_fault_prefault(fs, vaddr, PFBAK, PFFOR); */
 	vm_map_lookup_done(fs->map, fs->entry);
 	curthread->td_ru.ru_minflt++;
 	return (KERN_SUCCESS);
@@ -1248,11 +1248,11 @@ readrest:
 	 */
 	pmap_enter(fs.map->pmap, vaddr, fs.m, prot,
 	    fault_type | (wired ? PMAP_ENTER_WIRED : 0), 0);
-	if (faultcount != 1 && (fault_flags & VM_FAULT_WIRE) == 0 &&
-	    wired == 0)
-		vm_fault_prefault(&fs, vaddr,
-		    faultcount > 0 ? behind : PFBAK,
-		    faultcount > 0 ? ahead : PFFOR);
+	/* if (faultcount != 1 && (fault_flags & VM_FAULT_WIRE) == 0 && */
+	/*     wired == 0) */
+	/* 	vm_fault_prefault(&fs, vaddr, */
+	/* 	    faultcount > 0 ? behind : PFBAK, */
+	/* 	    faultcount > 0 ? ahead : PFFOR); */
 	VM_OBJECT_WLOCK(fs.object);
 	vm_page_lock(fs.m);
 

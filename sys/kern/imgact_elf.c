@@ -564,7 +564,8 @@ __elfN(load_section)(struct image_params *imgp, vm_ooffset_t offset,
 
 	if (map_len != 0) {
 		/* cow flags: don't dump readonly sections in core */
-		cow = MAP_COPY_ON_WRITE | MAP_PREFAULT |
+		cow = MAP_COPY_ON_WRITE |
+		    (prot & VM_PROT_EXECUTE ? 0 : MAP_PREFAULT)
 		    (prot & VM_PROT_WRITE ? 0 : MAP_DISABLE_COREDUMP);
 
 		rv = __elfN(map_insert)(imgp, map,
