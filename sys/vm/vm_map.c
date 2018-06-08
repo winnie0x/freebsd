@@ -1357,10 +1357,10 @@ charged:
 	 */
 	vm_map_simplify_entry(map, new_entry);
 
-	if ((cow & (MAP_PREFAULT | MAP_PREFAULT_PARTIAL)) != 0) {
-		vm_map_pmap_enter(map, start, prot, object, OFF_TO_IDX(offset),
-		    end - start, cow & MAP_PREFAULT_PARTIAL);
-	}
+	/* if ((cow & (MAP_PREFAULT | MAP_PREFAULT_PARTIAL)) != 0) { */
+	/* 	vm_map_pmap_enter(map, start, prot, object, OFF_TO_IDX(offset), */
+	/* 	    end - start, cow & MAP_PREFAULT_PARTIAL); */
+	/* } */
 
 	return (KERN_SUCCESS);
 }
