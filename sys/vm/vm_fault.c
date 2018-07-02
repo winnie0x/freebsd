@@ -958,8 +958,16 @@ readrest:
 				hardfault = true;
 				/* TUNABLE_INT_FETCH("vm.ag_code_promotion", &ag_code_promotion); */
 				if (ag_code_promotion) {
-					int holes = vm_reserv_holes(fs.m);
-					printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, holes);
+					//TODO
+					int holes[32];
+					int num_holes = vm_reserv_holes(fs.m, holes, 32);
+					if (num_holes != -1) {
+						printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, num_holes);
+						for (int i = 0; i < num_holes; i++) {
+							printf("[%d, %d] ", holes[2 * i], holes[2 * i + 1]);
+						}
+						printf("\n");
+					}
 				}
 				break; /* break to PAGE HAS BEEN FOUND */
 			}

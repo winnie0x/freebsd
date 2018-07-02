@@ -1139,11 +1139,11 @@ vm_reserv_to_superpage(vm_page_t m)
  * that reservation.  Otherwise, returns -1.
  */
 int
-vm_reserv_holes(vm_page_t m)
+vm_reserv_holes(vm_page_t m, int *holes, int n)
 {
 	vm_reserv_t rv;
 	popmap_t popmap[NPOPMAP];
-	int begin_zeroes, hi, i, lo, holes;
+	int begin_zeroes, hi, i, j, lo;
 
 	/* mtx_assert(&vm_page_queue_free_mtx, MA_OWNED); */
 	VM_OBJECT_ASSERT_WLOCKED(m->object);
@@ -1155,7 +1155,7 @@ vm_reserv_holes(vm_page_t m)
 		popmap[i] = rv->popmap[i];
 	}
 
-	holes = i = hi = 0;
+	i = j = hi = 0;
 	do {
 		/* Find the next 0 bit.  Any previous 0 bits are < "hi". */
 		lo = ffsl(~(((1UL << hi) - 1) | popmap[i]));
@@ -1188,15 +1188,19 @@ vm_reserv_holes(vm_page_t m)
 			/* Convert from ffsl() to ordinary bit numbering. */
 			hi--;
 		int end_zeroes = NBPOPMAP * i + hi;
-		int pages = end_zeroes - begin_zeroes;
 		if (begin_zeroes % 16 != 0)
 			printf("begin_zeroes at %d\n", begin_zeroes);
 		if (end_zeroes % 16 != 0)
 			printf("end_zeroes at %d\n", end_zeroes);
-		holes += pages / 16;
-	} while (i < NPOPMAP);
+		int nextb;
+		for (int b = begin_zeroes; b < end_zeroes && j < n - 1; b = nextb) {
+			nextb = (b + 16) & ~(15);
+			holes[j++] = b;
+			holes[j++] = (nextb > end_zeroes ? end_zeroes : nextb) - 1;
+		}
+	} while (i < NPOPMAP && j < n - 1);
 
-	return (holes);
+	return (j / 2);
 }
 
 #endif	/* VM_NRESERVLEVEL > 0 */
