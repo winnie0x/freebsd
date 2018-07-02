@@ -1134,4 +1134,69 @@ vm_reserv_to_superpage(vm_page_t m)
 	    rv->pages : NULL);
 }
 
+/*
+ * If the given page is backed by a reservation, returns the number of holes in
+ * that reservation.  Otherwise, returns -1.
+ */
+int
+vm_reserv_holes(vm_page_t m)
+{
+	vm_reserv_t rv;
+	popmap_t popmap[NPOPMAP];
+	int begin_zeroes, hi, i, lo, holes;
+
+	/* mtx_assert(&vm_page_queue_free_mtx, MA_OWNED); */
+	VM_OBJECT_ASSERT_WLOCKED(m->object);
+	rv = vm_reserv_from_page(m);
+	if (rv->object != m->object)
+		return (-1);
+
+	for (i = 0; i < NPOPMAP; i++) {
+		popmap[i] = rv->popmap[i];
+	}
+
+	holes = i = hi = 0;
+	do {
+		/* Find the next 0 bit.  Any previous 0 bits are < "hi". */
+		lo = ffsl(~(((1UL << hi) - 1) | popmap[i]));
+		if (lo == 0) {
+			/* Redundantly clears bits < "hi". */
+			popmap[i] = 0;
+			while (++i < NPOPMAP) {
+				lo = ffsl(~popmap[i]);
+				if (lo == 0) {
+					popmap[i] = 0;
+				} else
+					break;
+			}
+			if (i == NPOPMAP)
+				break;
+			hi = 0;
+		}
+		/* Convert from ffsl() to ordinary bit numbering. */
+		lo--;
+		if (lo > 0) {
+			/* Redundantly clears bits < "hi". */
+			popmap[i] &= ~((1UL << lo) - 1);
+		}
+		begin_zeroes = NBPOPMAP * i + lo;
+		/* Find the next 1 bit. */
+		do
+			hi = ffsl(popmap[i]);
+		while (hi == 0 && ++i < NPOPMAP);
+		if (i != NPOPMAP)
+			/* Convert from ffsl() to ordinary bit numbering. */
+			hi--;
+		int end_zeroes = NBPOPMAP * i + hi;
+		int pages = end_zeroes - begin_zeroes;
+		if (begin_zeroes % 16 != 0)
+			printf("begin_zeroes at %d\n", begin_zeroes);
+		if (end_zeroes % 16 != 0)
+			printf("end_zeroes at %d\n", end_zeroes);
+		holes += pages / 16;
+	} while (i < NPOPMAP);
+
+	return (holes);
+}
+
 #endif	/* VM_NRESERVLEVEL > 0 */

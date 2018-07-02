@@ -127,6 +127,11 @@ struct faultstate {
 	struct vnode *vp;
 };
 
+static int ag_code_promotion = 0;
+SYSCTL_INT(_vm, OID_AUTO, ag_code_promotion, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
+    &ag_code_promotion, 0, "Is aggressive code superpage promotion enabled?");
+
+
 static void vm_fault_dontneed(const struct faultstate *fs, vm_offset_t vaddr,
 	    int ahead);
 static void vm_fault_prefault(const struct faultstate *fs, vm_offset_t addra,
@@ -951,6 +956,11 @@ readrest:
 			if (rv == VM_PAGER_OK) {
 				faultcount = behind + 1 + ahead;
 				hardfault = true;
+				/* TUNABLE_INT_FETCH("vm.ag_code_promotion", &ag_code_promotion); */
+				if (ag_code_promotion) {
+					int holes = vm_reserv_holes(fs.m);
+					printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, holes);
+				}
 				break; /* break to PAGE HAS BEEN FOUND */
 			}
 			if (rv == VM_PAGER_ERROR)
