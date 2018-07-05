@@ -1135,6 +1135,17 @@ vm_reserv_to_superpage(vm_page_t m)
 }
 
 /*
+ * Return the pindex into the vm_object corresponding to the given popmap index
+ * into the same reservation that m comes from. This assumes that m is backed
+ * by a reservation.
+ */
+vm_pindex_t
+vm_reserv_popidx_to_pindex(vm_page_t m, int popidx)
+{
+	return (vm_reserv_from_page(m)->pindex + popidx);
+}
+
+/*
  * If the given page is backed by a reservation, returns the number of holes in
  * that reservation.  Otherwise, returns -1.
  */
@@ -1194,7 +1205,7 @@ vm_reserv_holes(vm_page_t m, int *holes, int n)
 			printf("end_zeroes at %d\n", end_zeroes);
 		int nextb;
 		for (int b = begin_zeroes; b < end_zeroes && j < n - 1; b = nextb) {
-			nextb = (b + 16) & ~(15);
+			nextb = (b + 16) & ~(15ul);
 			holes[j++] = b;
 			holes[j++] = (nextb > end_zeroes ? end_zeroes : nextb) - 1;
 		}
