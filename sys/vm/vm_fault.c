@@ -999,15 +999,21 @@ readrest:
 								 * We're gonna force a soft fault and promote.
 								 */
 								if (rv != VM_PAGER_OK) {
+									//TODO Free the page.
 									printf("rv != VM_PAGER_OK when i = %d\n", i);
 									break; /* break to the final break of VM_PAGER_OK */
 								}
+								vm_page_xunbusy(m);
+								vm_page_lock(m);
+								vm_page_deactivate(m);
+								vm_page_unlock(m);
 							}
 							if (i == num_holes) {
 								/*
 								 * Force a soft fault so that we get a superpage mapping.
 								 */
 								printf("All get_pages completed. Forcing soft fault.\n");
+								release_page(&fs);
 								unlock_and_deallocate(&fs);
 								goto RetryFault;
 							}
