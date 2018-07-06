@@ -1135,9 +1135,9 @@ vm_reserv_to_superpage(vm_page_t m)
 }
 
 /*
- * Return the pindex into the vm_object corresponding to the given popmap index
- * into the same reservation that m comes from. This assumes that m is backed
- * by a reservation.
+ * Returns the pindex (into m's owning vm_object) corresponding to the given
+ * popmap index (into the same reservation that m comes from).  This assumes
+ * that m is backed by a reservation.
  */
 vm_pindex_t
 vm_reserv_popidx_to_pindex(vm_page_t m, int popidx)
@@ -1147,7 +1147,9 @@ vm_reserv_popidx_to_pindex(vm_page_t m, int popidx)
 
 /*
  * If the given page is backed by a reservation, returns the number of holes in
- * that reservation.  Otherwise, returns -1.
+ * that reservation.  Otherwise, returns -1.  The "holes" array will end up
+ * storing boundaries of the holes, each of which is at most 64K in size. The
+ * boundaries are inclusive on both ends.
  */
 int
 vm_reserv_holes(vm_page_t m, int *holes, int n)
@@ -1171,7 +1173,6 @@ vm_reserv_holes(vm_page_t m, int *holes, int n)
 		/* Find the next 0 bit.  Any previous 0 bits are < "hi". */
 		lo = ffsl(~(((1UL << hi) - 1) | popmap[i]));
 		if (lo == 0) {
-			/* Redundantly clears bits < "hi". */
 			popmap[i] = 0;
 			while (++i < NPOPMAP) {
 				lo = ffsl(~popmap[i]);
@@ -1187,7 +1188,6 @@ vm_reserv_holes(vm_page_t m, int *holes, int n)
 		/* Convert from ffsl() to ordinary bit numbering. */
 		lo--;
 		if (lo > 0) {
-			/* Redundantly clears bits < "hi". */
 			popmap[i] &= ~((1UL << lo) - 1);
 		}
 		begin_zeroes = NBPOPMAP * i + lo;
@@ -1204,10 +1204,12 @@ vm_reserv_holes(vm_page_t m, int *holes, int n)
 		if (end_zeroes % 16 != 0)
 			printf("end_zeroes at %d\n", end_zeroes);
 		int nextb;
-		for (int b = begin_zeroes; b < end_zeroes && j < n - 1; b = nextb) {
+		for (int b = begin_zeroes; b < end_zeroes && j < n - 1;
+		    b = nextb) {
 			nextb = (b + 16) & ~(15ul);
 			holes[j++] = b;
-			holes[j++] = (nextb > end_zeroes ? end_zeroes : nextb) - 1;
+			holes[j++] =
+			    (nextb > end_zeroes ? end_zeroes : nextb) - 1;
 		}
 	} while (i < NPOPMAP && j < n - 1);
 

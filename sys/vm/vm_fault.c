@@ -265,6 +265,60 @@ vm_fault_fill_hold(vm_page_t *m_hold, vm_page_t m)
 	}
 }
 
+static bool
+vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
+{
+	vm_page_t m;
+	int ahead, alloc_req, behind, i, rv;
+
+	for (i = 0; i < num_holes; i++) {
+		if (!vm_page_count_severe() || P_KILLED(curproc)) {
+			alloc_req = P_KILLED(curproc) ?
+			    VM_ALLOC_SYSTEM : VM_ALLOC_NORMAL;
+			if (fs->object->type != OBJT_VNODE &&
+			    fs->object->backing_object == NULL)
+				alloc_req |= VM_ALLOC_ZERO;
+			/*
+			 * TODO Pass in a flag to abort if allocation is not
+			 * coming from a reservation.
+			 * TODO Is it ok to overwrite fs->m?
+			 */
+			m = vm_page_alloc(fs->object,
+			    vm_reserv_popidx_to_pindex(fs->m,
+			    (holes[2 * i] + holes[2 * i + 1]) / 2),
+			    alloc_req);
+		}
+		if (m == NULL) {
+			/*
+			 * Since we are aggressively promoting the reservation,
+			 * do not wait for a free page if one is not readily
+			 * available.
+			 */
+			printf("fs->m == NULL when i = %d\n", i);
+			break;
+		}
+		behind = (holes[2 * i + 1] - holes[2 * i]) / 2;
+		ahead = (holes[2 * i + 1] - holes[2 * i] + 1) / 2;
+		rv = vm_pager_get_pages(fs->object, &m, 1, &behind, &ahead);
+		/*
+		 * No need to update faultcount here. It's used for
+		 * vm_fault_prefault.  We're gonna force a soft fault and
+		 * promote.
+		 */
+		if (rv != VM_PAGER_OK) {
+			//TODO Free the page.
+			printf("rv != VM_PAGER_OK when i = %d\n", i);
+			break;
+		}
+		vm_page_xunbusy(m);
+		vm_page_lock(m);
+		vm_page_deactivate(m);
+		vm_page_unlock(m);
+	}
+
+	return (i == num_holes ? true : false);
+}
+
 /*
  * Unlocks fs.first_object and fs.map on success.
  */
@@ -531,7 +585,6 @@ vm_fault_hold(vm_map_t map, vm_offset_t vaddr, vm_prot_t fault_type,
 	struct vnode *vp;
 	vm_object_t next_object, retry_object;
 	vm_offset_t e_end, e_start;
-	vm_page_t m;
 	vm_pindex_t retry_pindex;
 	vm_prot_t prot, retry_prot;
 	int ahead, alloc_req, behind, cluster_offset, error, era, faultcount;
@@ -957,66 +1010,30 @@ readrest:
 			if (rv == VM_PAGER_OK) {
 				faultcount = behind + 1 + ahead;
 				hardfault = true;
-				/* TUNABLE_INT_FETCH("vm.ag_code_promotion", &ag_code_promotion); */
 				if (ag_code_promotion) {
-					//TODO
 					int holes[32];
-					int num_holes = vm_reserv_holes(fs.m, holes, 32);
-					if (num_holes != -1) {
-						printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, num_holes);
-						for (i = 0; i < num_holes; i++) {
+					int nholes = vm_reserv_holes(fs.m,
+					    holes, 32);
+					if (nholes != -1) {
+						printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, nholes);
+						for (i = 0; i < nholes; i++) {
 							printf("[%d, %d] ", holes[2 * i], holes[2 * i + 1]);
 						}
 						printf("\n");
-						if (num_holes <= 3) {
-							/* ag_promote */
-							for (i = 0; i < num_holes; i++) {
-								if (!vm_page_count_severe() || P_KILLED(curproc)) {
-									alloc_req = P_KILLED(curproc) ?
-									    VM_ALLOC_SYSTEM : VM_ALLOC_NORMAL;
-									if (fs.object->type != OBJT_VNODE &&
-									    fs.object->backing_object == NULL)
-										alloc_req |= VM_ALLOC_ZERO;
-									//TODO Pass in a flag to abort if allocation is not coming from a reservation.
-									//TODO Is it ok to overwrite fs.m?
-									m = vm_page_alloc(fs.object,
-									    vm_reserv_popidx_to_pindex(fs.m, (holes[2 * i] + holes[2 * i + 1]) / 2),
-									    alloc_req);
-								}
-								if (m == NULL) {
-									/*
-									 * Since we are aggressively promoting the reservation, do
-									 * not wait for a free page if one is not readily available.
-									 */
-									printf("fs.m == NULL when i = %d\n", i);
-									break; /* break to the final break of VM_PAGER_OK */
-								}
-								behind = (holes[2 * i + 1] - holes[2 * i]) / 2;
-								ahead = (holes[2 * i + 1] - holes[2 * i] + 1) / 2;
-								rv = vm_pager_get_pages(fs.object, &m, 1, &behind, &ahead);
-								/*
-								 * No need to update faultcount. It's used for vm_fault_prefault.
-								 * We're gonna force a soft fault and promote.
-								 */
-								if (rv != VM_PAGER_OK) {
-									//TODO Free the page.
-									printf("rv != VM_PAGER_OK when i = %d\n", i);
-									break; /* break to the final break of VM_PAGER_OK */
-								}
-								vm_page_xunbusy(m);
-								vm_page_lock(m);
-								vm_page_deactivate(m);
-								vm_page_unlock(m);
-							}
-							if (i == num_holes) {
-								/*
-								 * Force a soft fault so that we get a superpage mapping.
-								 */
-								printf("All get_pages completed. Forcing soft fault.\n");
-								release_page(&fs);
-								unlock_and_deallocate(&fs);
-								goto RetryFault;
-							}
+					}
+					if (nholes != -1 && nholes <= 3) {
+						if (vm_fault_fill_holes(&fs,
+						    holes, nholes)) {
+							/*
+							 * Force a soft fault
+							 * so that we get a
+							 * superpage mapping.
+							 */
+							printf("fill_holes successful. Forcing soft fault.\n");
+							release_page(&fs);
+							unlock_and_deallocate(
+							    &fs);
+							goto RetryFault;
 						}
 					}
 				}
