@@ -127,9 +127,12 @@ struct faultstate {
 	struct vnode *vp;
 };
 
-static int ag_code_promotion = 0;
-SYSCTL_INT(_vm, OID_AUTO, ag_code_promotion, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
-    &ag_code_promotion, 0, "Is aggressive code superpage promotion enabled?");
+static int code_promo_thld = 0;
+SYSCTL_INT(_vm, OID_AUTO, code_promo_thld, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
+    &code_promo_thld, 0, "Aggressive code superpage promotion threshold");
+static int code_promo_debug = 0;
+SYSCTL_INT(_vm, OID_AUTO, code_promo_debug, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
+    &code_promo_debug, 0, "Aggressive code superpage promotion debug level");
 
 
 static void vm_fault_dontneed(const struct faultstate *fs, vm_offset_t vaddr,
@@ -1010,18 +1013,19 @@ readrest:
 			if (rv == VM_PAGER_OK) {
 				faultcount = behind + 1 + ahead;
 				hardfault = true;
-				if (ag_code_promotion) {
+				if (code_promo_thld) {
 					int holes[32];
 					int nholes = vm_reserv_holes(fs.m,
 					    holes, 32);
-					if (nholes != -1) {
+					if (code_promo_debug && nholes != -1) {
 						printf("pid %d (%s) fault at 0x%lx has %d holes\n", curproc->p_pid, curproc->p_comm, vaddr, nholes);
 						for (i = 0; i < nholes; i++) {
 							printf("[%d, %d] ", holes[2 * i], holes[2 * i + 1]);
 						}
 						printf("\n");
 					}
-					if (nholes != -1 && nholes <= 3) {
+					if (nholes != -1 && nholes <=
+					    code_promo_thld) {
 						if (vm_fault_fill_holes(&fs,
 						    holes, nholes)) {
 							/*
