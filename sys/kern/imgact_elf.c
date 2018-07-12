@@ -800,6 +800,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	    (hdr->e_type != ET_EXEC && hdr->e_type != ET_DYN))
 		return (-1);
 
+	printf("Passed elf header check\n");
+
 	/*
 	 * From here on down, we return an errno, not -1, as we've
 	 * detected an ELF file.
@@ -931,6 +933,11 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			if (phdr[i].p_memsz == 0)
 				break;
 			prot = __elfN(trans_prot)(phdr[i].p_flags);
+			if ((prot & VM_PROT_EXECUTE) == VM_PROT_EXECUTE) {
+				if (phdr[i + 1].p_offset >= round_2mpage((phdr[i].p_offset + phdr[i].p_filesz))) {
+					printf("Detecting an LLD RX segment\n");
+				}
+			}
 			error = __elfN(load_section)(imgp, phdr[i].p_offset,
 			    (caddr_t)(uintptr_t)phdr[i].p_vaddr + et_dyn_addr,
 			    phdr[i].p_memsz, phdr[i].p_filesz, prot,
