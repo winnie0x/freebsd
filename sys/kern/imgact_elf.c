@@ -787,6 +787,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	u_long seg_size, seg_addr, addr, baddr, et_dyn_addr, entry, proghdr;
 	int32_t osrel;
 	int error, i, n, interp_name_len, have_interp;
+	bool is_lld_max2m_rx;
 
 	hdr = (const Elf_Ehdr *)imgp->image_header;
 
@@ -928,20 +929,25 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		goto ret;
 
 	for (i = 0; i < hdr->e_phnum; i++) {
+		is_lld_max2m_rx = false;
 		switch (phdr[i].p_type) {
 		case PT_LOAD:	/* Loadable segment */
 			if (phdr[i].p_memsz == 0)
 				break;
 			prot = __elfN(trans_prot)(phdr[i].p_flags);
-			if ((prot & VM_PROT_EXECUTE) == VM_PROT_EXECUTE) {
+			if ((prot & (VM_PROT_EXECUTE | VM_PROT_READ)) == (VM_PROT_EXECUTE | VM_PROT_READ)) {
 				if (phdr[i + 1].p_offset >= round_2mpage((phdr[i].p_offset + phdr[i].p_filesz))) {
 					printf("Detecting an LLD RX segment\n");
+					is_lld_max2m_rx = true;
 				}
 			}
 			error = __elfN(load_section)(imgp, phdr[i].p_offset,
 			    (caddr_t)(uintptr_t)phdr[i].p_vaddr + et_dyn_addr,
-			    phdr[i].p_memsz, phdr[i].p_filesz, prot,
-			    sv->sv_pagesize);
+			    is_lld_max2m_rx ?
+			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz,
+			    is_lld_max2m_rx ?
+			    round_2mpage(phdr[i].p_filesz) : phdr[i].p_filesz,
+			    prot, sv->sv_pagesize);
 			if (error != 0)
 				goto ret;
 
@@ -958,7 +964,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 				    et_dyn_addr;
 
 			seg_addr = trunc_page(phdr[i].p_vaddr + et_dyn_addr);
-			seg_size = round_page(phdr[i].p_memsz +
+			seg_size = round_page((is_lld_max2m_rx ?
+			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz) +
 			    phdr[i].p_vaddr + et_dyn_addr - seg_addr);
 
 			/*
