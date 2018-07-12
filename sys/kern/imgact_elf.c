@@ -937,7 +937,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 			prot = __elfN(trans_prot)(phdr[i].p_flags);
 			if ((prot & (VM_PROT_EXECUTE | VM_PROT_READ)) == (VM_PROT_EXECUTE | VM_PROT_READ)) {
 				if (phdr[i + 1].p_offset >= round_2mpage((phdr[i].p_offset + phdr[i].p_filesz))) {
-					printf("Detecting an LLD RX segment\n");
+					printf("pid %d (%s) detecting an LLD RX segment\n", curproc->p_pid, curproc->p_comm);
 					is_lld_max2m_rx = true;
 				}
 			}
