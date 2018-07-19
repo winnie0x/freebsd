@@ -1006,7 +1006,7 @@ void	fork_exit(void (*)(void *, struct trapframe *), void *,
 void	fork_return(struct thread *, struct trapframe *);
 int	inferior(struct proc *p);
 void	kern_proc_vmmap_resident(struct vm_map *map, struct vm_map_entry *entry,
-	    int *resident_count, bool *super);
+	    int *resident_count, bool *super, bool *fully_super);
 void	kern_yield(int);
 void 	kick_proc0(void);
 void	killjobc(void);

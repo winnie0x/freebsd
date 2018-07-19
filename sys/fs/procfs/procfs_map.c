@@ -90,7 +90,7 @@ procfs_doprocmap(PFS_FILL_ARGS)
 	vm_eflags_t e_eflags;
 	vm_prot_t e_prot;
 	unsigned int last_timestamp;
-	bool super;
+	bool fully_super, super;
 #ifdef COMPAT_FREEBSD32
 	bool wrap32;
 #endif
@@ -144,7 +144,8 @@ procfs_doprocmap(PFS_FILL_ARGS)
 			lobj = tobj;
 		}
 		if (obj != NULL)
-			kern_proc_vmmap_resident(map, entry, &resident, &super);
+			kern_proc_vmmap_resident(map, entry, &resident, &super,
+			    &fully_super);
 		for (tobj = obj; tobj != NULL; tobj = tobj->backing_object) {
 			if (tobj != obj && tobj != lobj)
 				VM_OBJECT_RUNLOCK(tobj);

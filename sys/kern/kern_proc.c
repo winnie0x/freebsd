@@ -2260,7 +2260,7 @@ CTASSERT(sizeof(struct kinfo_vmentry) == KINFO_VMENTRY_SIZE);
 
 void
 kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
-    int *resident_count, bool *super)
+    int *resident_count, bool *super, bool *fully_super)
 {
 	vm_object_t obj, tobj;
 	vm_page_t m, m_adv;
@@ -2269,6 +2269,7 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 	vm_pindex_t pi, pi_adv, pindex;
 
 	*super = false;
+	*fully_super = true;
 	*resident_count = 0;
 	if (vmmap_skip_res_cnt)
 		return;
@@ -2301,6 +2302,14 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 			}
 		}
 		m_adv = NULL;
+		if ((addr & (pagesizes[1] - 1)) == 0 &&
+		    addr + pagesizes[1] <= entry->end) {
+			if (m->psind == 0 ||
+			    (pmap_mincore(map->pmap, addr, &locked_pa) &
+			    MINCORE_SUPER) == 0) {
+				*fully_super = false;
+			}
+		}
 		if (m->psind != 0 && addr + pagesizes[1] <= entry->end &&
 		    (addr & (pagesizes[1] - 1)) == 0 &&
 		    (pmap_mincore(map->pmap, addr, &locked_pa) &
@@ -2341,7 +2350,7 @@ kern_proc_vmmap_out(struct proc *p, struct sbuf *sb, ssize_t maxlen, int flags)
 	vm_offset_t addr;
 	unsigned int last_timestamp;
 	int error;
-	bool super;
+	bool fully_super, super;
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 
@@ -2376,9 +2385,11 @@ kern_proc_vmmap_out(struct proc *p, struct sbuf *sb, ssize_t maxlen, int flags)
 				kve->kve_private_resident =
 				    obj->resident_page_count;
 			kern_proc_vmmap_resident(map, entry,
-			    &kve->kve_resident, &super);
+			    &kve->kve_resident, &super, &fully_super);
 			if (super)
 				kve->kve_flags |= KVME_FLAG_SUPER;
+			if (fully_super)
+				kve->kve_flags |= KVME_FLAG_FULLY_SUPER;
 			for (tobj = obj; tobj != NULL;
 			    tobj = tobj->backing_object) {
 				if (tobj != obj && tobj != lobj)
