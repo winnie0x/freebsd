@@ -2330,6 +2330,10 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 next:;
 	}
 	PA_UNLOCK_COND(locked_pa);
+	if (*fully_super) {
+		printf("addr %lx fully_super, resident_count %d\n", addr,
+		    resident_count);
+	}
 }
 
 /*
