@@ -2267,10 +2267,11 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 	vm_offset_t addr;
 	vm_paddr_t locked_pa;
 	vm_pindex_t pi, pi_adv, pindex;
+	int super_count;
 
 	*super = false;
 	*fully_super = true;
-	*resident_count = 0;
+	super_count = *resident_count = 0;
 	if (vmmap_skip_res_cnt)
 		return;
 
@@ -2315,6 +2316,7 @@ kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
 		    (pmap_mincore(map->pmap, addr, &locked_pa) &
 		    MINCORE_SUPER) != 0) {
 			*super = true;
+			super_count++;
 			pi_adv = atop(pagesizes[1]);
 		} else {
 			/*
@@ -2332,6 +2334,9 @@ next:;
 	PA_UNLOCK_COND(locked_pa);
 
 	*fully_super = (*super && *fully_super) ? true : false;
+	if (*super) {
+		printf("addr %lx super, super_count %d\n", addr, super_count);
+	}
 	if (*fully_super) {
 		printf("addr %lx fully_super, resident_count %d\n", addr,
 		    *resident_count);
