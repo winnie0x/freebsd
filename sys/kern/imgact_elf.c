@@ -113,9 +113,9 @@ SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     fallback_brand, CTLFLAG_RWTUN, &__elfN(fallback_brand), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " brand of last resort");
 
-static int __elfN(rx_round_2m) = 0;
+static int __elfN(round_2m) = 0;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
-    rx_round_2m, CTLFLAG_RWTUN, &__elfN(rx_round_2m), 0,
+    round_2m, CTLFLAG_RWTUN, &__elfN(round_2m), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " rounding RX segment up to 2M boundary enabled?");
 
 static int elf_legacy_coredump = 0;
@@ -792,7 +792,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	u_long seg_size, seg_addr, addr, baddr, et_dyn_addr, entry, proghdr;
 	int32_t osrel;
 	int error, i, n, interp_name_len, have_interp;
-	bool rx_round_2m;
+	bool round_2m;
 
 	hdr = (const Elf_Ehdr *)imgp->image_header;
 
@@ -932,26 +932,25 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		goto ret;
 
 	for (i = 0; i < hdr->e_phnum; i++) {
-		rx_round_2m = false;
+		round_2m = false;
 		switch (phdr[i].p_type) {
 		case PT_LOAD:	/* Loadable segment */
 			if (phdr[i].p_memsz == 0)
 				break;
 			prot = __elfN(trans_prot)(phdr[i].p_flags);
-			if (__elfN(rx_round_2m)) {
-				if ((prot & (VM_PROT_EXECUTE | VM_PROT_READ))
-				    == (VM_PROT_EXECUTE | VM_PROT_READ) &&
+			if (__elfN(round_2m)) {
+				if ((prot & VM_PROT_WRITE) == 0 &&
 				    round_2mpage(phdr[i].p_offset +
 				    phdr[i].p_filesz) <= imgp->attr->va_size) {
-					printf("pid %d (%s) detecting a RX segment that fits into the file after rounding up to 2M\n", curproc->p_pid, curproc->p_comm);
-					rx_round_2m = true;
+					printf("pid %d (%s) detecting a R(X) segment at %lx that fits into the file after rounding up to 2M\n", curproc->p_pid, curproc->p_comm, (unsigned long)phdr[i].p_vaddr);
+					round_2m = true;
 				}
 			}
 			error = __elfN(load_section)(imgp, phdr[i].p_offset,
 			    (caddr_t)(uintptr_t)phdr[i].p_vaddr + et_dyn_addr,
-			    rx_round_2m ?
+			    round_2m ?
 			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz,
-			    rx_round_2m ?
+			    round_2m ?
 			    round_2mpage(phdr[i].p_filesz) : phdr[i].p_filesz,
 			    prot, sv->sv_pagesize);
 			if (error != 0)
@@ -970,7 +969,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 				    et_dyn_addr;
 
 			seg_addr = trunc_page(phdr[i].p_vaddr + et_dyn_addr);
-			seg_size = round_page((rx_round_2m ?
+			seg_size = round_page((round_2m ?
 			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz) +
 			    phdr[i].p_vaddr + et_dyn_addr - seg_addr);
 
