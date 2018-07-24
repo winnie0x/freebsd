@@ -195,7 +195,8 @@ map_object(int fd, const char *path, const struct stat *sb)
     base_flags = __getosreldate() >= P_OSREL_MAP_GUARD ||
       (P_OSREL_MAJOR(__getosreldate()) == 11 && __getosreldate() >=
       P_OSREL_MAP_GUARD_11) ? MAP_GUARD : MAP_PRIVATE | MAP_ANON | MAP_NOCORE;
-    if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1])
+    /* if (npagesizes > 1 && round_page(segs[0]->p_filesz) >= pagesizes[1]) */
+    if (npagesizes > 1)
 	base_flags |= MAP_ALIGNED_SUPER;
     if (base_vaddr != 0)
 	base_flags |= MAP_FIXED | MAP_EXCL;
