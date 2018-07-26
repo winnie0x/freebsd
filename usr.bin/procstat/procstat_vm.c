@@ -97,7 +97,8 @@ procstat_vm(struct procstat *procstat, struct kinfo_proc *kipp)
 		xo_emit("{d:need_copy/%-1s}", kve->kve_flags &
 		    KVME_FLAG_NEEDS_COPY ? "N" : "-");
 		xo_emit("{d:super_pages/%-1s}", kve->kve_flags &
-		    KVME_FLAG_SUPER ? "S" : "-");
+		    KVME_FLAG_FULLY_SUPER ? "S" : (kve->kve_flags &
+		    KVME_FLAG_SUPER ? "s" : "-"));
 		xo_emit("{d:grows_down/%-1s} ", kve->kve_flags &
 		    KVME_FLAG_GROWS_UP ? "U" : kve->kve_flags &
 		    KVME_FLAG_GROWS_DOWN ? "D" : "-");
