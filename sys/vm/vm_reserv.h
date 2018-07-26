@@ -65,6 +65,8 @@ int		vm_reserv_size(int level);
 vm_paddr_t	vm_reserv_startup(vm_offset_t *vaddr, vm_paddr_t end,
 		    vm_paddr_t high_water);
 vm_page_t	vm_reserv_to_superpage(vm_page_t m);
+vm_pindex_t	vm_reserv_popidx_to_pindex(vm_page_t m, int popidx);
+int		vm_reserv_holes(vm_page_t m, int *holes, int n);
 
 #endif	/* VM_NRESERVLEVEL > 0 */
 #endif	/* _KERNEL */
