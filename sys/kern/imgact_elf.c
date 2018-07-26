@@ -113,6 +113,15 @@ SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     fallback_brand, CTLFLAG_RWTUN, &__elfN(fallback_brand), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " brand of last resort");
 
+static int __elfN(round_2m) = 0;
+SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
+    round_2m, CTLFLAG_RWTUN, &__elfN(round_2m), 0,
+    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " rounding R(X) segment up to 2M boundary enabled?");
+static int __elfN(round_2m_debug) = 0;
+SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
+    round_2m_debug, CTLFLAG_RWTUN, &__elfN(round_2m_debug), 0,
+    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " round_2m debugging messages?");
+
 static int elf_legacy_coredump = 0;
 SYSCTL_INT(_debug, OID_AUTO, __elfN(legacy_coredump), CTLFLAG_RW, 
     &elf_legacy_coredump, 0,
@@ -786,10 +795,12 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	Elf_Brandinfo *brand_info;
 	struct sysentvec *sv;
 	vm_prot_t prot;
+	int *next_load;
 	u_long text_size, data_size, total_size, text_addr, data_addr;
 	u_long seg_size, seg_addr, addr, baddr, et_dyn_addr, entry, proghdr;
 	int32_t osrel;
-	int error, i, n, interp_name_len, have_interp;
+	int error, i, n, interp_name_len, have_interp, prev_load;
+	bool round_2m;
 
 	hdr = (const Elf_Ehdr *)imgp->image_header;
 
@@ -820,6 +831,9 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		return (ENOEXEC);
 	}
 
+	prev_load = -1;
+	next_load = mallocarray(hdr->e_phnum, sizeof(*next_load),
+	    M_TEMP, M_WAITOK);
 	n = error = 0;
 	baddr = 0;
 	osrel = 0;
@@ -831,8 +845,23 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	td = curthread;
 
 	for (i = 0; i < hdr->e_phnum; i++) {
+		next_load[i] = -1;
 		switch (phdr[i].p_type) {
 		case PT_LOAD:
+			/*
+			 * Regarding the p_paddr field, the ELF spec says that
+			 * > On systems for which physical addressing is
+			 * > relevant, this member is reserved for the segment's
+			 * > physical address. Because System V ignores physical
+			 * > addressing for application programs, this member
+			 * > has unspecified contents for executable files and
+			 * > shared objects.
+			 * Here we use it to store the index of the next
+			 * loadable segment entry.
+			 */
+			if (prev_load != -1)
+				next_load[prev_load] = i;
+			prev_load = i;
 			if (n == 0)
 				baddr = phdr[i].p_vaddr;
 			n++;
@@ -929,15 +958,45 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 		goto ret;
 
 	for (i = 0; i < hdr->e_phnum; i++) {
+		round_2m = false;
 		switch (phdr[i].p_type) {
 		case PT_LOAD:	/* Loadable segment */
 			if (phdr[i].p_memsz == 0)
 				break;
 			prot = __elfN(trans_prot)(phdr[i].p_flags);
+			if (__elfN(round_2m)) {
+				/*
+				 * The ELF spec says that
+				 * > Loadable segment entries in the program
+				 * > header table appear in ascending order,
+				 * > sorted on the p_vaddr member.
+				 * It is unclear though if the PT_LOAD entries
+				 * actually appear one after another. Peeking
+				 * into the next entry assumes this. If we want
+				 * something more generic, it should be trivial
+				 * to store the index of the next PT_LOAD entry
+				 * in some unused PT_LOAD field during the
+				 * previous pass over program headers.
+				 */
+				if ((prot & VM_PROT_WRITE) == 0 &&
+				    round_2mpage(phdr[i].p_offset +
+				    phdr[i].p_filesz) <= imgp->attr->va_size &&
+				    next_load[i] > 0 &&
+				    phdr[next_load[i]].p_vaddr >=
+				    phdr[i].p_vaddr +
+				    round_2mpage(phdr[i].p_memsz)) {
+					if (__elfN(round_2m_debug))
+						printf("pid %d (%s) detecting a R(X) segment at %lx that fits into the file after rounding up to 2M\n", curproc->p_pid, curproc->p_comm, (unsigned long)phdr[i].p_vaddr);
+					round_2m = true;
+				}
+			}
 			error = __elfN(load_section)(imgp, phdr[i].p_offset,
 			    (caddr_t)(uintptr_t)phdr[i].p_vaddr + et_dyn_addr,
-			    phdr[i].p_memsz, phdr[i].p_filesz, prot,
-			    sv->sv_pagesize);
+			    round_2m ?
+			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz,
+			    round_2m ?
+			    round_2mpage(phdr[i].p_filesz) : phdr[i].p_filesz,
+			    prot, sv->sv_pagesize);
 			if (error != 0)
 				goto ret;
 
@@ -954,7 +1013,8 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 				    et_dyn_addr;
 
 			seg_addr = trunc_page(phdr[i].p_vaddr + et_dyn_addr);
-			seg_size = round_page(phdr[i].p_memsz +
+			seg_size = round_page((round_2m ?
+			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz) +
 			    phdr[i].p_vaddr + et_dyn_addr - seg_addr);
 
 			/*
@@ -1090,6 +1150,7 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 	imgp->proc->p_elf_flags = hdr->e_flags;
 
  ret:
+	free(next_load, M_TEMP);
 	free(interp_buf, M_TEMP);
 	return (error);
 }
