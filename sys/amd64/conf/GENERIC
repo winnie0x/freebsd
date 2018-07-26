@@ -361,3 +361,10 @@ device		netmap			# netmap(4) support
 
 # The crypto framework is required by IPSEC
 device		crypto			# Required by IPSEC
+
+# fdescfs.ko
+device		fdescfs
+# ums.ko
+device		ums
+# hwpmc.ko
+device		hwpmc
