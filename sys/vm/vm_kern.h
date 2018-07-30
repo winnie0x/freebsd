@@ -76,5 +76,6 @@ extern vm_offset_t swapbkva;
 extern u_long vm_kmem_size;
 extern u_int exec_map_entries;
 extern u_int exec_map_entry_size;
+extern int vm_prefault_enabled;
 
 #endif /* _VM_VM_KERN_H_ */
