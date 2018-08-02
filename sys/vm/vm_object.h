@@ -67,13 +67,18 @@
 #ifndef	_VM_OBJECT_
 #define	_VM_OBJECT_
 
+#include <sys/types.h>
+#include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/_lock.h>
 #include <sys/_mutex.h>
 #include <sys/_pctrie.h>
 #include <sys/_rwlock.h>
 
+#include <vm/pmap.h>
 #include <vm/_vm_radix.h>
+
+MALLOC_DECLARE(M_VMOBJECT);
 
 /*
  *	Types defined:
@@ -113,6 +118,7 @@ struct vm_object {
 	vm_ooffset_t backing_object_offset;/* Offset in backing object */
 	TAILQ_ENTRY(vm_object) pager_object_list; /* list of all objects of this pager type */
 	LIST_HEAD(, vm_reserv) rvq;	/* list of reservations */
+	pmap_t pt_pmap;			/* Pseudo-pmap managing shared page table pages. */
 	void *handle;
 	union {
 		/*

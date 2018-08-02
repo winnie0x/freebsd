@@ -1236,6 +1236,8 @@ vm_map_insert(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 		protoeflags |= MAP_ENTRY_STACK_GAP_DN;
 	if ((cow & MAP_CREATE_STACK_GAP_UP) != 0)
 		protoeflags |= MAP_ENTRY_STACK_GAP_UP;
+	if (cow & MAP_TRY_SHARE_PT)
+		protoeflags |= MAP_ENTRY_SHAREPT;
 	if (cow & MAP_INHERIT_SHARE)
 		inheritance = VM_INHERIT_SHARE;
 	else
@@ -1359,8 +1361,9 @@ charged:
 
 	if (vm_prefault_enabled &&
 	    (cow & (MAP_PREFAULT | MAP_PREFAULT_PARTIAL)) != 0) {
-		vm_map_pmap_enter(map, start, prot, object, OFF_TO_IDX(offset),
-		    end - start, cow & MAP_PREFAULT_PARTIAL);
+		vm_map_pmap_enter(map, start, prot,
+		    object, OFF_TO_IDX(offset), end - start,
+		    cow & (MAP_PREFAULT_PARTIAL | MAP_TRY_SHARE_PT));
 	}
 
 	return (KERN_SUCCESS);
@@ -1450,6 +1453,10 @@ vm_map_findspace(vm_map_t map, vm_offset_t start, vm_size_t length,
 	panic("vm_map_findspace: max_free corrupt");
 }
 
+static int share_ptp = 0;
+SYSCTL_INT(_vm, OID_AUTO, share_ptp, CTLFLAG_RWTUN, &share_ptp, 0,
+    "Share L1 page table pages?");
+
 int
 vm_map_fixed(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
     vm_offset_t start, vm_size_t length, vm_prot_t prot,
@@ -1462,6 +1469,8 @@ vm_map_fixed(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 	KASSERT((cow & (MAP_STACK_GROWS_DOWN | MAP_STACK_GROWS_UP)) == 0 ||
 	    object == NULL,
 	    ("vm_map_fixed: non-NULL backing object for stack"));
+	if (!share_ptp)
+		cow &= ~MAP_TRY_SHARE_PT;
 	vm_map_lock(map);
 	VM_MAP_RANGE_CHECK(map, start, end);
 	if ((cow & MAP_CHECK_EXCL) == 0)
@@ -1498,6 +1507,8 @@ vm_map_find(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
 	KASSERT((cow & (MAP_STACK_GROWS_DOWN | MAP_STACK_GROWS_UP)) == 0 ||
 	    object == NULL,
 	    ("vm_map_find: non-NULL backing object for stack"));
+	if (!share_ptp)
+		cow &= ~MAP_TRY_SHARE_PT;
 	if (find_space == VMFS_OPTIMAL_SPACE && (object == NULL ||
 	    (object->flags & OBJ_COLORED) == 0))
 		find_space = VMFS_ANY_SPACE;
@@ -1525,7 +1536,8 @@ again:
 			case VMFS_SUPER_SPACE:
 			case VMFS_OPTIMAL_SPACE:
 				pmap_align_superpage(object, offset, addr,
-				    length);
+				    length,
+				    (cow & MAP_TRY_SHARE_PT) ? FALSE : TRUE);
 				break;
 			case VMFS_ANY_SPACE:
 				break;
@@ -1977,13 +1989,16 @@ vm_map_pmap_enter(vm_map_t map, vm_offset_t addr, vm_prot_t prot,
 			}
 		} else if (p_start != NULL) {
 			pmap_enter_object(map->pmap, start, addr +
-			    ptoa(tmpidx), p_start, prot);
+			    ptoa(tmpidx), p_start,
+			    prot | ((flags & MAP_TRY_SHARE_PT) ?
+			    VM_PROT_SHAREPT : prot));
 			p_start = NULL;
 		}
 	}
 	if (p_start != NULL)
 		pmap_enter_object(map->pmap, start, addr + ptoa(psize),
-		    p_start, prot);
+		    p_start, prot | ((flags & MAP_TRY_SHARE_PT) ?
+		    VM_PROT_SHAREPT : prot));
 	VM_OBJECT_RUNLOCK(object);
 }
 
@@ -2039,6 +2054,24 @@ vm_map_protect(vm_map_t map, vm_offset_t start, vm_offset_t end,
 			vm_map_unlock(map);
 			return (KERN_PROTECTION_FAILURE);
 		}
+		if (current->eflags & MAP_ENTRY_SHAREPT) {
+			old_prot = current->protection;
+			if (old_prot !=
+			    (set_max ? (old_prot & new_prot) : new_prot)) {
+				/*
+				 * TODO The flag indicates our "intention" to
+				 * share PT.  It is possible that this process
+				 * is not actually sharing PT with anyone.
+				 * Perhaps let pmap provide a helper function
+				 * that checks for the PG_SHAREPT bit?
+				 * Eventually we might wanna get rid of the
+				 * "intention" bit and just keep a "fact" bit?
+				 */
+				printf("Changes requested on shared pt\n");
+				return (KERN_PROTECTION_FAILURE);
+			}
+		}
+		current = current->next;
 	}
 
 	/*

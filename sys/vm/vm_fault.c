@@ -375,7 +375,9 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 	}
 #endif
 	rv = pmap_enter(fs->map->pmap, vaddr, m_map, prot, fault_type |
-	    PMAP_ENTER_NOSLEEP | (wired ? PMAP_ENTER_WIRED : 0), psind);
+	    PMAP_ENTER_NOSLEEP | (wired ? PMAP_ENTER_WIRED : 0) |
+	    ((fs->entry->eflags & MAP_ENTRY_SHAREPT) ? PMAP_ENTER_SHAREPT : 0),
+	    psind);
 	if (rv != KERN_SUCCESS)
 		return (rv);
 	vm_fault_fill_hold(m_hold, m);
@@ -1350,7 +1352,9 @@ readrest:
 	 * won't find it (yet).
 	 */
 	pmap_enter(fs.map->pmap, vaddr, fs.m, prot,
-	    fault_type | (wired ? PMAP_ENTER_WIRED : 0), 0);
+	    fault_type | (wired ? PMAP_ENTER_WIRED : 0) |
+	    ((fs.entry->eflags & MAP_ENTRY_SHAREPT) ? PMAP_ENTER_SHAREPT : 0),
+	    0);
 	if (vm_prefault_enabled && faultcount != 1 &&
 	    (fault_flags & VM_FAULT_WIRE) == 0 && wired == 0)
 		vm_fault_prefault(&fs, vaddr,
@@ -1553,7 +1557,9 @@ vm_fault_prefault(const struct faultstate *fs, vm_offset_t addra,
 		}
 		if (m->valid == VM_PAGE_BITS_ALL &&
 		    (m->flags & PG_FICTITIOUS) == 0)
-			pmap_enter_quick(pmap, addr, m, entry->protection);
+			pmap_enter_quick(pmap, addr, m, entry->protection |
+			    ((entry->eflags & MAP_ENTRY_SHAREPT) ?
+			    VM_PROT_SHAREPT : 0));
 		if (!obj_locked || lobject != entry->object.vm_object)
 			VM_OBJECT_RUNLOCK(lobject);
 	}

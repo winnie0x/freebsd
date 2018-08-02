@@ -113,6 +113,8 @@
 #define	PG_FRAME	(0x000ffffffffff000ul)
 #define	PG_PS_FRAME	(0x000fffffffe00000ul)
 
+#define	PG_SHAREPT	0x100	/* Bit 8 is ignored in a PDE that references a page table. */
+
 /*
  * Promotion to a 2MB (PDE) page mapping requires that the corresponding 4KB
  * (PTE) page mappings have identical settings for the following fields:

@@ -70,6 +70,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/lock.h>
+#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/kernel.h>
@@ -99,6 +100,8 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_radix.h>
 #include <vm/vm_reserv.h>
 #include <vm/uma.h>
+
+MALLOC_DEFINE(M_VMOBJECT, "vm_object", "vm_object malloc");
 
 static int old_msync;
 SYSCTL_INT(_vm, OID_AUTO, old_msync, CTLFLAG_RW, &old_msync, 0,
@@ -856,6 +859,11 @@ vm_object_terminate(vm_object_t object)
 	 * Let the pager know object is dead.
 	 */
 	vm_pager_deallocate(object);
+
+	/*
+	 * TODO Destroy the pseudo-pmap managing shared page table pages.
+	 */
+
 	VM_OBJECT_WUNLOCK(object);
 
 	vm_object_destroy(object);

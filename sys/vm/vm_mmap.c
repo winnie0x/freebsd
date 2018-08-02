@@ -97,6 +97,10 @@ int old_mlock = 0;
 SYSCTL_INT(_vm, OID_AUTO, old_mlock, CTLFLAG_RWTUN, &old_mlock, 0,
     "Do not apply RLIMIT_MEMLOCK on mlockall");
 
+static int force_lib_align = 0;
+SYSCTL_INT(_vm, OID_AUTO, force_lib_align, CTLFLAG_RWTUN, &force_lib_align, 0,
+    "Force 2M alignment on libraries?");
+
 #ifdef MAP_32BIT
 #define	MAP_32BIT_MAX_ADDR	((vm_offset_t)1 << 31)
 #endif
@@ -226,7 +230,7 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 	}
 	if ((flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_HASSEMAPHORE |
 	    MAP_STACK | MAP_NOSYNC | MAP_ANON | MAP_EXCL | MAP_NOCORE |
-	    MAP_PREFAULT_READ | MAP_GUARD |
+	    MAP_PREFAULT_READ | MAP_GUARD | MAP_SHAREPT | MAP_RTLD |
 #ifdef MAP_32BIT
 	    MAP_32BIT |
 #endif
@@ -243,6 +247,8 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 	    pos != 0 || (flags & (MAP_SHARED | MAP_PRIVATE | MAP_PREFAULT |
 	    MAP_PREFAULT_READ | MAP_ANON | MAP_STACK)) != 0))
 		return (EINVAL);
+	if ((flags & MAP_RTLD) && force_lib_align)
+		flags |= MAP_ALIGNED_SUPER;
 
 	/*
 	 * Align the file position to a page boundary,
@@ -1517,6 +1523,8 @@ vm_mmap_object(vm_map_t map, vm_offset_t *addr, vm_size_t size, vm_prot_t prot,
 		docow |= MAP_CHECK_EXCL;
 	if ((flags & MAP_GUARD) != 0)
 		docow |= MAP_CREATE_GUARD;
+	if (flags & MAP_SHAREPT)
+		docow |= MAP_TRY_SHARE_PT;
 
 	if (fitit) {
 		if ((flags & MAP_ALIGNMENT_MASK) == MAP_ALIGNED_SUPER)
