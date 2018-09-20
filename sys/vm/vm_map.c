@@ -1160,6 +1160,10 @@ vm_map_lookup_entry(
 	return (FALSE);
 }
 
+int vm_map_prefault_enabled = 1;
+SYSCTL_INT(_vm, OID_AUTO, vm_map_prefault_enabled, CTLFLAG_RWTUN,
+    &vm_map_prefault_enabled, 0, "Pre-faulting enabled?");
+
 /*
  *	vm_map_insert:
  *
@@ -1359,7 +1363,7 @@ charged:
 	 */
 	vm_map_simplify_entry(map, new_entry);
 
-	if (vm_prefault_enabled &&
+	if (vm_map_prefault_enabled &&
 	    (cow & (MAP_PREFAULT | MAP_PREFAULT_PARTIAL)) != 0) {
 		vm_map_pmap_enter(map, start, prot,
 		    object, OFF_TO_IDX(offset), end - start,

@@ -112,10 +112,6 @@ SYSCTL_ULONG(_vm, OID_AUTO, max_kernel_address, CTLFLAG_RD,
 #endif
     "Max kernel address");
 
-int vm_prefault_enabled = 1;
-SYSCTL_INT(_vm, OID_AUTO, prefault_enabled, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
-    &vm_prefault_enabled, 0, "Pre-faulting enabled?");
-
 /*
  *	kva_alloc:
  *

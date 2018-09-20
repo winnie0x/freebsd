@@ -128,11 +128,14 @@ struct faultstate {
 };
 
 static int code_promo_thld = 0;
-SYSCTL_INT(_vm, OID_AUTO, code_promo_thld, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
+SYSCTL_INT(_vm, OID_AUTO, code_promo_thld, CTLFLAG_RWTUN,
     &code_promo_thld, 0, "Aggressive code superpage promotion threshold");
 static int code_promo_debug = 0;
-SYSCTL_INT(_vm, OID_AUTO, code_promo_debug, CTLFLAG_RWTUN | CTLFLAG_NOFETCH,
+SYSCTL_INT(_vm, OID_AUTO, code_promo_debug, CTLFLAG_RWTUN,
     &code_promo_debug, 0, "Aggressive code superpage promotion debug level");
+int vm_fault_prefault_enabled = 1;
+SYSCTL_INT(_vm, OID_AUTO, vm_fault_prefault_enabled, CTLFLAG_RWTUN,
+    &vm_fault_prefault_enabled, 0, "Pre-faulting enabled?");
 
 
 static void vm_fault_dontneed(const struct faultstate *fs, vm_offset_t vaddr,
@@ -382,7 +385,7 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 		return (rv);
 	vm_fault_fill_hold(m_hold, m);
 	vm_fault_dirty(fs->entry, m, prot, fault_type, fault_flags, false);
-	if (vm_prefault_enabled && psind == 0 && !wired)
+	if (vm_fault_prefault_enabled && psind == 0 && !wired)
 		vm_fault_prefault(fs, vaddr, PFBAK, PFFOR, true);
 	VM_OBJECT_RUNLOCK(fs->first_object);
 	vm_map_lookup_done(fs->map, fs->entry);
@@ -1355,7 +1358,7 @@ readrest:
 	    fault_type | (wired ? PMAP_ENTER_WIRED : 0) |
 	    ((fs.entry->eflags & MAP_ENTRY_SHAREPT) ? PMAP_ENTER_SHAREPT : 0),
 	    0);
-	if (vm_prefault_enabled && faultcount != 1 &&
+	if (vm_fault_prefault_enabled && faultcount != 1 &&
 	    (fault_flags & VM_FAULT_WIRE) == 0 && wired == 0)
 		vm_fault_prefault(&fs, vaddr,
 		    faultcount > 0 ? behind : PFBAK,
