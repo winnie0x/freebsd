@@ -121,6 +121,10 @@ static int __elfN(round_2m_debug) = 0;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     round_2m_debug, CTLFLAG_RWTUN, &__elfN(round_2m_debug), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " round_2m debugging messages?");
+static int __elfN(share_main_ptp) = 0;
+SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
+    share_main_ptp, CTLFLAG_RWTUN, &__elfN(share_main_ptp), 0,
+    __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " main executable PTP sharing enabled?");
 
 static int elf_legacy_coredump = 0;
 SYSCTL_INT(_debug, OID_AUTO, __elfN(legacy_coredump), CTLFLAG_RW, 
@@ -580,7 +584,7 @@ __elfN(load_section)(struct image_params *imgp, vm_ooffset_t offset,
 		    (prot & VM_PROT_WRITE ? 0 : MAP_DISABLE_COREDUMP);
 		/* TODO NBPDR might not be defined on some architecture. */
 		/* if ((prot & VM_PROT_WRITE) == 0 && map_len >= NBPDR) */
-		if ((prot & VM_PROT_WRITE) == 0)
+		if (__elfN(share_main_ptp) && (prot & VM_PROT_WRITE) == 0)
 			cow |= MAP_TRY_SHARE_PT;
 
 		rv = __elfN(map_insert)(imgp, map,

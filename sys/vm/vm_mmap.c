@@ -100,6 +100,9 @@ SYSCTL_INT(_vm, OID_AUTO, old_mlock, CTLFLAG_RWTUN, &old_mlock, 0,
 static int force_lib_align = 0;
 SYSCTL_INT(_vm, OID_AUTO, force_lib_align, CTLFLAG_RWTUN, &force_lib_align, 0,
     "Force 2M alignment on libraries?");
+static int share_lib_ptp = 0;
+SYSCTL_INT(_vm, OID_AUTO, share_lib_ptp, CTLFLAG_RWTUN, &share_lib_ptp, 0,
+    "Force 2M alignment on libraries?");
 
 #ifdef MAP_32BIT
 #define	MAP_32BIT_MAX_ADDR	((vm_offset_t)1 << 31)
@@ -249,6 +252,8 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 		return (EINVAL);
 	if ((flags & MAP_RTLD) && force_lib_align)
 		flags |= MAP_ALIGNED_SUPER;
+	if ((flags & MAP_RTLD) && !share_lib_ptp)
+		flags &= ~MAP_SHAREPT;
 
 	/*
 	 * Align the file position to a page boundary,
