@@ -97,10 +97,10 @@ int old_mlock = 0;
 SYSCTL_INT(_vm, OID_AUTO, old_mlock, CTLFLAG_RWTUN, &old_mlock, 0,
     "Do not apply RLIMIT_MEMLOCK on mlockall");
 
-static int force_lib_align = 0;
+static int force_lib_align = 1;
 SYSCTL_INT(_vm, OID_AUTO, force_lib_align, CTLFLAG_RWTUN, &force_lib_align, 0,
     "Force 2M alignment on libraries?");
-static int share_lib_ptp = 0;
+static int share_lib_ptp = 1;
 SYSCTL_INT(_vm, OID_AUTO, share_lib_ptp, CTLFLAG_RWTUN, &share_lib_ptp, 0,
     "Force 2M alignment on libraries?");
 

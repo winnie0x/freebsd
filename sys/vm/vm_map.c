@@ -1457,7 +1457,7 @@ vm_map_findspace(vm_map_t map, vm_offset_t start, vm_size_t length,
 	panic("vm_map_findspace: max_free corrupt");
 }
 
-static int share_ptp = 0;
+static int share_ptp = 1;
 SYSCTL_INT(_vm, OID_AUTO, share_ptp, CTLFLAG_RWTUN, &share_ptp, 0,
     "Share L1 page table pages?");
 
