@@ -121,7 +121,7 @@ static int __elfN(round_2m_debug) = 0;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     round_2m_debug, CTLFLAG_RWTUN, &__elfN(round_2m_debug), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " round_2m debugging messages?");
-static int __elfN(share_main_ptp) = 0;
+static int __elfN(share_main_ptp) = 1;
 SYSCTL_INT(__CONCAT(_kern_elf, __ELF_WORD_SIZE), OID_AUTO,
     share_main_ptp, CTLFLAG_RWTUN, &__elfN(share_main_ptp), 0,
     __XSTRING(__CONCAT(ELF, __ELF_WORD_SIZE)) " main executable PTP sharing enabled?");
