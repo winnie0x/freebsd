@@ -1019,7 +1019,7 @@ readrest:
 				faultcount = behind + 1 + ahead;
 				hardfault = true;
 				if (code_promo_thld) {
-#define THLD_MAX 31
+#define THLD_MAX 16
 					if (code_promo_thld > THLD_MAX)
 						panic("code_promo_thld > THLD_MAX");
 					int holes[2 * (THLD_MAX + 1)];
