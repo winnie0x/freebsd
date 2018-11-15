@@ -276,8 +276,11 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 {
 	vm_page_t m;
 	int ahead, alloc_req, behind, i, rv;
+	bool zero_fill;
 
+	zero_fill = false;
 	for (i = 0; i < num_holes; i++) {
+		m = NULL;
 		if (!vm_page_count_severe() || P_KILLED(curproc)) {
 			alloc_req = P_KILLED(curproc) ?
 			    VM_ALLOC_SYSTEM : VM_ALLOC_NORMAL;
@@ -289,9 +292,18 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			 * coming from a reservation.
 			 * TODO Is it ok to overwrite fs->m?
 			 */
+			if (btoc(fs->object->un_pager.vnp.vnp_size) <
+			    vm_reserv_popidx_to_pindex(fs->m,
+			    holes[2 * i + 1])) {
+				zero_fill = true;
+				if (btoc(fs->object->un_pager.vnp.vnp_size) <
+				    vm_reserv_popidx_to_pindex(fs->m,
+				    holes[2 * i]))
+					break;
+			}
 			m = vm_page_alloc(fs->object,
 			    vm_reserv_popidx_to_pindex(fs->m,
-			    (holes[2 * i] + holes[2 * i + 1]) / 2),
+			    (holes[2 * i] + (zero_fill ? btoc(fs->object->un_pager.vnp.vnp_size) : holes[2 * i + 1])) / 2),
 			    alloc_req);
 		}
 		if (m == NULL) {
@@ -300,7 +312,7 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			 * do not wait for a free page if one is not readily
 			 * available.
 			 */
-			printf("fs->m == NULL when i = %d\n", i);
+			printf("m == NULL when i = %d\n", i);
 			break;
 		}
 		behind = (holes[2 * i + 1] - holes[2 * i]) / 2;
@@ -316,13 +328,49 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			printf("rv != VM_PAGER_OK when i = %d\n", i);
 			break;
 		}
-		vm_page_xunbusy(m);
 		vm_page_lock(m);
 		vm_page_deactivate(m);
 		vm_page_unlock(m);
+		vm_page_xunbusy(m);
+		if (zero_fill)
+			break;
+	}
+	if (zero_fill) {
+		for (i = btoc(fs->object->un_pager.vnp.vnp_size) + 1;
+		    i <= vm_reserv_popidx_to_pindex(fs->m,
+		    holes[num_holes * 2 - 1]); i++) {
+			m = NULL;
+			if (!vm_page_count_severe() || P_KILLED(curproc)) {
+				alloc_req = P_KILLED(curproc) ?
+				    VM_ALLOC_SYSTEM : VM_ALLOC_NORMAL;
+				alloc_req |= VM_ALLOC_ZERO;
+				/*
+				 * TODO Same as above
+				 */
+				m = vm_page_alloc(fs->object, i, alloc_req);
+			}
+			if (m == NULL) {
+				printf("NULL m in zero_fill when i = %d\n", i);
+				break;
+			}
+			if ((m->flags & PG_ZERO) == 0) {
+				printf("vm_fault_fill_holes: VM_ALLOC_ZERO not honored\n");
+				pmap_zero_page(m);
+			} else {
+				PCPU_INC(cnt.v_ozfod);
+			}
+			PCPU_INC(cnt.v_zfod);
+			m->valid = VM_PAGE_BITS_ALL;
+			vm_page_lock(m);
+			vm_page_deactivate(m);
+			vm_page_unlock(m);
+			vm_page_xunbusy(m);
+		}
 	}
 
-	return (i == num_holes ? true : false);
+	return ((!zero_fill && (i == num_holes)) ||
+	    (zero_fill && (i == vm_reserv_popidx_to_pindex(fs->m,
+	    holes[num_holes * 2 - 1]) + 1)) ? true : false);
 }
 
 /*

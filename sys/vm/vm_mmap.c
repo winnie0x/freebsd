@@ -234,6 +234,7 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 	if ((flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_HASSEMAPHORE |
 	    MAP_STACK | MAP_NOSYNC | MAP_ANON | MAP_EXCL | MAP_NOCORE |
 	    MAP_PREFAULT_READ | MAP_GUARD | MAP_SHAREPT | MAP_RTLD |
+	    MAP_PAD_SUPER |
 #ifdef MAP_32BIT
 	    MAP_32BIT |
 #endif
@@ -1204,6 +1205,7 @@ vm_mmap_vnode(struct thread *td, vm_size_t objsize,
 	vm_object_t obj;
 	vm_ooffset_t foff;
 	struct ucred *cred;
+	vm_pindex_t new_size;
 	int error, flags, locktype;
 
 	cred = td->td_ucred;
@@ -1275,6 +1277,19 @@ vm_mmap_vnode(struct thread *td, vm_size_t objsize,
 		if (obj == NULL) {
 			error = ENOMEM;
 			goto done;
+		} else {
+			VM_OBJECT_WLOCK(obj);
+			if (flags & MAP_PAD_SUPER) {
+				new_size = (obj->size + NPTEPG - 1) & NPTEPG;
+				if (new_size != obj->size) {
+					printf("vm_mmap_vnode: obj->size to be changed from 0x%lx to 0x%lx\n", obj->size, new_size);
+					obj->size = new_size;
+					if (obj->flags & OBJ_PAD_SUPER)
+						panic("vm_mmap_vnode: OBJ_PAD_SUPER already set");
+					obj->flags |= OBJ_PAD_SUPER;
+				}
+			}
+			VM_OBJECT_WUNLOCK(obj);
 		}
 	} else {
 		KASSERT(obj->type == OBJT_DEFAULT || obj->type == OBJT_SWAP,

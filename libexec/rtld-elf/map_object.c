@@ -92,6 +92,9 @@ map_object(int fd, const char *path, const struct stat *sb)
     Elf_Addr note_end;
     char *note_map;
     size_t note_map_len;
+    int *next_load;
+    int prev_load;
+    bool round_2m;
 
     hdr = get_elf_header(fd, path, sb);
     if (hdr == NULL)
@@ -114,8 +117,12 @@ map_object(int fd, const char *path, const struct stat *sb)
     note_end = 0;
     note_map = NULL;
     segs = alloca(sizeof(segs[0]) * hdr->e_phnum);
+    next_load = alloca(sizeof(next_load[0]) * hdr->e_phnum);
+    prev_load = -1;
+    i = 0;
     stack_flags = RTLD_DEFAULT_STACK_PF_EXEC | PF_R | PF_W;
     while (phdr < phlimit) {
+	next_load[i] = -1;
 	switch (phdr->p_type) {
 
 	case PT_INTERP:
@@ -129,6 +136,9 @@ map_object(int fd, const char *path, const struct stat *sb)
 		    path, nsegs);
 		goto error;
 	    }
+	    if (prev_load != -1)
+		next_load[prev_load] = i;
+	    prev_load = i;
 	    break;
 
 	case PT_PHDR:
@@ -174,6 +184,7 @@ map_object(int fd, const char *path, const struct stat *sb)
 	}
 
 	++phdr;
+	i++;
     }
     if (phdyn == NULL) {
 	_rtld_error("%s: object is not dynamically-linked", path);
@@ -215,6 +226,7 @@ map_object(int fd, const char *path, const struct stat *sb)
     }
 
     for (i = 0; i <= nsegs; i++) {
+	round_2m = false;
 	/* Overlay the segment onto the proper region. */
 	data_offset = trunc_page(segs[i]->p_offset);
 	data_vaddr = trunc_page(segs[i]->p_vaddr);
@@ -222,9 +234,17 @@ map_object(int fd, const char *path, const struct stat *sb)
 	data_addr = mapbase + (data_vaddr - base_vaddr);
 	data_prot = convert_prot(segs[i]->p_flags);
 	data_flags = convert_flags(segs[i]->p_flags) | MAP_FIXED;
+	if ((data_prot & PROT_WRITE) == 0 &&
+	    next_load[i] > 0 &&
+	    segs[next_load[i]]->p_vaddr >=
+	    segs[i]->p_vaddr +
+	    round_2mpage(segs[i]->p_memsz)) {
+		round_2m = true;
+	}
 	if (mmap(data_addr, data_vlimit - data_vaddr, data_prot,
 	  data_flags | MAP_PREFAULT_READ |
-	  ((data_prot & PROT_WRITE) ? 0 : MAP_SHAREPT),
+	  ((data_prot & PROT_WRITE) ? 0 : MAP_SHAREPT) |
+	  (round_2m ? MAP_PAD_SUPER : 0),
 	  fd, data_offset) == (caddr_t) -1) {
 	    _rtld_error("%s: mmap of data failed: %s", path,
 		rtld_strerror(errno));
@@ -283,6 +303,7 @@ map_object(int fd, const char *path, const struct stat *sb)
     }
     obj->mapbase = mapbase;
     obj->mapsize = mapsize;
+    /* TODO should we use round_2mpage here if MAP_PAD_SUPER? */
     obj->textsize = round_page(segs[0]->p_vaddr + segs[0]->p_memsz) -
       base_vaddr;
     obj->vaddrbase = base_vaddr;

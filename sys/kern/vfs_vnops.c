@@ -2466,7 +2466,11 @@ vn_mmap(struct file *fp, vm_map_t map, vm_offset_t *addr, vm_size_t size,
 	    &foff, &object, &writecounted);
 	if (error != 0)
 		return (error);
-	error = vm_mmap_object(map, addr, size, prot, maxprot, flags, object,
+	if (flags & MAP_PAD_SUPER)
+		printf("vn_mmap: MAP_PAD_SUPER set, about to map 0x%lx instead of 0x%lx\n", round_2mpage(size), size);
+	error = vm_mmap_object(map, addr,
+	    (flags & MAP_PAD_SUPER) ? round_2mpage(size) : size,
+	    prot, maxprot, flags, object,
 	    foff, writecounted, td);
 	if (error != 0) {
 		/*

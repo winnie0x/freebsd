@@ -99,6 +99,7 @@
 #endif
 #define	MAP_SHAREPT	 0x00100000
 #define	MAP_RTLD	 0x00200000
+#define	MAP_PAD_SUPER	 0x00400000
 
 /*
  * Request specific alignment (n == log2 of the desired alignment).
