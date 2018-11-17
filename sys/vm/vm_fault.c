@@ -368,9 +368,13 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 		}
 	}
 
-	return ((!zero_fill && (i == num_holes)) ||
+	rv = (!zero_fill && (i == num_holes)) ||
 	    (zero_fill && (i == vm_reserv_popidx_to_pindex(fs->m,
-	    holes[num_holes * 2 - 1]) + 1)) ? true : false);
+	    holes[num_holes * 2 - 1]) + 1)) ? 1 : 0;
+	if (rv && (vm_reserv_level_iffullpop(fs->m) == -1))
+		panic("vm_fault_fill_holes: reservation should be full");
+
+	return (rv ? true : false);
 }
 
 /*
