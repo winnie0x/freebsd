@@ -336,7 +336,7 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			break;
 	}
 	if (zero_fill) {
-		for (i = btoc(fs->object->un_pager.vnp.vnp_size) + 1;
+		for (i = btoc(fs->object->un_pager.vnp.vnp_size);
 		    i <= vm_reserv_popidx_to_pindex(fs->m,
 		    holes[num_holes * 2 - 1]); i++) {
 			m = NULL;
