@@ -292,18 +292,18 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			 * coming from a reservation.
 			 * TODO Is it ok to overwrite fs->m?
 			 */
-			if (btoc(fs->object->un_pager.vnp.vnp_size) <
+			if (fs->object->size <=
 			    vm_reserv_popidx_to_pindex(fs->m,
 			    holes[2 * i + 1])) {
 				zero_fill = true;
-				if (btoc(fs->object->un_pager.vnp.vnp_size) <
+				if (fs->object->size <=
 				    vm_reserv_popidx_to_pindex(fs->m,
 				    holes[2 * i]))
 					break;
 			}
 			m = vm_page_alloc(fs->object,
 			    vm_reserv_popidx_to_pindex(fs->m,
-			    (holes[2 * i] + (zero_fill ? btoc(fs->object->un_pager.vnp.vnp_size) : holes[2 * i + 1])) / 2),
+			    (holes[2 * i] + (zero_fill ? fs->object->size : holes[2 * i + 1])) / 2),
 			    alloc_req);
 		}
 		if (m == NULL) {
@@ -336,7 +336,7 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 			break;
 	}
 	if (zero_fill) {
-		for (i = btoc(fs->object->un_pager.vnp.vnp_size);
+		for (i = fs->object->size;
 		    i <= vm_reserv_popidx_to_pindex(fs->m,
 		    holes[num_holes * 2 - 1]); i++) {
 			m = NULL;
