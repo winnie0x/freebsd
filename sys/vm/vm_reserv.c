@@ -631,7 +631,8 @@ vm_reserv_alloc_page(vm_object_t object, vm_pindex_t pindex, vm_page_t mpred)
 	 * Is a reservation fundamentally impossible?
 	 */
 	if (pindex < VM_RESERV_INDEX(object, pindex) ||
-	    pindex >= object->size)
+	    pindex >=
+	    ((object->flags & OBJ_PAD_SUPER) ? object->pad_size : object->size))
 		return (NULL);
 
 	/*
@@ -681,7 +682,9 @@ vm_reserv_alloc_page(vm_object_t object, vm_pindex_t pindex, vm_page_t mpred)
 	/*
 	 * Would a new reservation extend past the end of the object? 
 	 */
-	if (first + VM_LEVEL_0_NPAGES > object->size) {
+	if (first + VM_LEVEL_0_NPAGES >
+	    ((object->flags & OBJ_PAD_SUPER) ?
+	    object->pad_size : object->size)) {
 		/*
 		 * Don't allocate a new reservation if the object is a vnode or
 		 * backed by another object that is a vnode. 

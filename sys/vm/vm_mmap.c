@@ -1281,9 +1281,9 @@ vm_mmap_vnode(struct thread *td, vm_size_t objsize,
 			VM_OBJECT_WLOCK(obj);
 			if (flags & MAP_PAD_SUPER) {
 				new_size = (obj->size + NPTEPG - 1) & NPTEPG;
-				if (new_size != obj->size) {
-					printf("vm_mmap_vnode: obj->size to be changed from 0x%lx to 0x%lx\n", obj->size, new_size);
-					obj->size = new_size;
+				if (new_size != obj->pad_size) {
+					printf("vm_mmap_vnode: obj->pad_size to be changed from 0x%lx to 0x%lx\n", obj->pad_size, new_size);
+					obj->pad_size = new_size;
 					if (obj->flags & OBJ_PAD_SUPER)
 						panic("vm_mmap_vnode: OBJ_PAD_SUPER already set");
 					obj->flags |= OBJ_PAD_SUPER;
