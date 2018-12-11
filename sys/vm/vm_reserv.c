@@ -624,7 +624,7 @@ vm_reserv_alloc_page(vm_object_t object, vm_pindex_t pindex, vm_page_t mpred)
 	if (object->flags & OBJ_PAD_SUPER) {
 		if (object->type != OBJT_VNODE)
 			panic("vm_reserv_alloc_page: object has OBJ_PAD_SUPER set but not of type OBJT_VNODE");
-		if (object->size & (NPTEPG - 1))
+		if (object->pad_size & (NPTEPG - 1))
 			panic("vm_reserv_alloc_page: object has OBJ_PAD_SUPER set but size not 512-aligned");
 	}
 	/*
