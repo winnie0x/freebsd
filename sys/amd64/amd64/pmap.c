@@ -370,6 +370,14 @@ static int xpg_ps_disabled = 0;
 SYSCTL_INT(_vm_pmap, OID_AUTO, xpg_ps_disabled, CTLFLAG_RW,
     &xpg_ps_disabled, 0, "Are executable superpage mappings disabled?");
 
+/*
+ * 0 allows superpage mappings on non-executable pages.
+ * 1 disables superpage mappings on all non-executable pages.
+ */
+static int nxpg_ps_disabled = 0;
+SYSCTL_INT(_vm_pmap, OID_AUTO, nxpg_ps_disabled, CTLFLAG_RW,
+    &nxpg_ps_disabled, 0, "Are non-executable superpage mappings disabled?");
+
 #define	PAT_INDEX_SIZE	8
 static int pat_index[PAT_INDEX_SIZE];	/* cache mode to PAT index conversion */
 
@@ -4610,6 +4618,9 @@ setpde:
 			printf("pid %d (%s) xpg_ps_disabled == 1 but RWX mapping exists at 0x%lx\n", curproc->p_pid, curproc->p_comm, va);
 		}
 	}
+	if (nxpg_ps_disabled && (newpde & pg_nx) != 0) {
+		return;
+	}
 	if ((newpde & (PG_M | PG_RW)) == PG_RW) {
 		/*
 		 * When PG_M is already clear, PG_RW can be cleared without
@@ -5112,6 +5123,9 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 		} else {
 			printf("pid %d (%s) xpg_ps_disabled == 1 but RWX mapping exists at 0x%lx\n", curproc->p_pid, curproc->p_comm, va);
 		}
+	}
+	if (nxpg_ps_disabled && (newpde & pg_nx) != 0) {
+		return;
 	}
 	PG_V = pmap_valid_bit(pmap);
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
