@@ -136,6 +136,12 @@ SYSCTL_INT(_vm, OID_AUTO, code_promo_debug, CTLFLAG_RWTUN,
 int vm_fault_prefault_enabled = 1;
 SYSCTL_INT(_vm, OID_AUTO, vm_fault_prefault_enabled, CTLFLAG_RWTUN,
     &vm_fault_prefault_enabled, 0, "Pre-faulting enabled?");
+static int fast_nxpg_ps_disabled = 0;
+SYSCTL_INT(_vm, OID_AUTO, fast_nxpg_ps_disabled, CTLFLAG_RWTUN,
+    &fast_nxpg_ps_disabled, 0, "Are non-executable superpage mappings disabled?");
+static int fast_xpg_ps_disabled = 0;
+SYSCTL_INT(_vm, OID_AUTO, fast_xpg_ps_disabled, CTLFLAG_RWTUN,
+    &fast_xpg_ps_disabled, 0, "Are executable superpage mappings disabled?");
 
 
 static void vm_fault_dontneed(const struct faultstate *fs, vm_offset_t vaddr,
@@ -348,6 +354,8 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 	m_map = m;
 	psind = 0;
 #if defined(__amd64__) && VM_NRESERVLEVEL > 0
+	if (((fast_nxpg_ps_disabled == 0) || (prot & VM_PROT_EXECUTE) != 0) 
+       && (fast_xpg_ps_disabled == 0 || (prot & VM_PROT_EXECUTE) == 0)) {
 	if ((m->flags & PG_FICTITIOUS) == 0 &&
 	    (m_super = vm_reserv_to_superpage(m)) != NULL &&
 	    rounddown2(vaddr, pagesizes[m_super->psind]) >= fs->entry->start &&
@@ -375,6 +383,7 @@ vm_fault_soft_fast(struct faultstate *fs, vm_offset_t vaddr, vm_prot_t prot,
 			if ((flags & PS_ALL_DIRTY) != 0)
 				fault_type |= VM_PROT_WRITE;
 		}
+	}
 	}
 #endif
 	rv = pmap_enter(fs->map->pmap, vaddr, m_map, prot, fault_type |

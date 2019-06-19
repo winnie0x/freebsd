@@ -5117,16 +5117,16 @@ pmap_enter_pde(pmap_t pmap, vm_offset_t va, pd_entry_t newpde, u_int flags,
 	PG_RW = pmap_rw_bit(pmap);
 	KASSERT((newpde & (pmap_modified_bit(pmap) | PG_RW)) != PG_RW,
 	    ("pmap_enter_pde: newpde is missing PG_M"));
-	if (xpg_ps_disabled && (newpde & pg_nx) == 0) {
+	/*if (xpg_ps_disabled && (newpde & pg_nx) == 0) {
 		if ((newpde & PG_RW) == 0 || xpg_ps_disabled == 2) {
 			return (KERN_FAILURE);
 		} else {
 			printf("pid %d (%s) xpg_ps_disabled == 1 but RWX mapping exists at 0x%lx\n", curproc->p_pid, curproc->p_comm, va);
 		}
-	}
-	if (nxpg_ps_disabled && (newpde & pg_nx) != 0) {
-		return;
-	}
+	}*/
+	/*if (nxpg_ps_disabled && (newpde & pg_nx) != 0) {
+		return (KERN_FAILURE);
+	}*/
 	PG_V = pmap_valid_bit(pmap);
 	PMAP_LOCK_ASSERT(pmap, MA_OWNED);
 
