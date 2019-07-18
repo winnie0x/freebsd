@@ -92,6 +92,10 @@ __FBSDID("$FreeBSD$");
 
 SYSCTL_NODE(_compat, OID_AUTO, linuxkpi, CTLFLAG_RW, 0, "LinuxKPI parameters");
 
+int linuxkpi_debug;
+SYSCTL_INT(_compat_linuxkpi, OID_AUTO, debug, CTLFLAG_RWTUN,
+    &linuxkpi_debug, 0, "Set to enable pr_debug() prints. Clear to disable.");
+
 MALLOC_DEFINE(M_KMALLOC, "linux", "Linux kmalloc compat");
 
 #include <linux/rbtree.h>
@@ -2328,7 +2332,7 @@ __register_chrdev(unsigned int major, unsigned int baseminor,
 
 	for (i = baseminor; i < baseminor + count; i++) {
 		cdev = cdev_alloc();
-		cdev_init(cdev, fops);
+		cdev->ops = fops;
 		kobject_set_name(&cdev->kobj, name);
 
 		ret = cdev_add(cdev, makedev(major, i), 1);
@@ -2350,7 +2354,7 @@ __register_chrdev_p(unsigned int major, unsigned int baseminor,
 
 	for (i = baseminor; i < baseminor + count; i++) {
 		cdev = cdev_alloc();
-		cdev_init(cdev, fops);
+		cdev->ops = fops;
 		kobject_set_name(&cdev->kobj, name);
 
 		ret = cdev_add_ext(cdev, makedev(major, i), uid, gid, mode);

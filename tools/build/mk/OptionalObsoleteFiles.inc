@@ -2434,12 +2434,16 @@ OLD_FILES+=usr/include/omp.h
 .endif
 OLD_FILES+=usr/lib/libgcov.a
 OLD_FILES+=usr/lib/libgomp.a
+.if ${MK_OPENMP} == no
 OLD_FILES+=usr/lib/libgomp.so
+.endif
 OLD_LIBS+=usr/lib/libgomp.so.1
 OLD_FILES+=usr/lib/libgomp_p.a
 OLD_FILES+=usr/lib32/libgcov.a
 OLD_FILES+=usr/lib32/libgomp.a
+.if ${MK_OPENMP} == no
 OLD_FILES+=usr/lib32/libgomp.so
+.endif
 OLD_LIBS+=usr/lib32/libgomp.so.1
 OLD_FILES+=usr/lib32/libgomp_p.a
 OLD_FILES+=usr/libexec/cc1
@@ -3411,6 +3415,8 @@ OLD_FILES+=usr/share/man/man5/ipf.5.gz
 OLD_FILES+=usr/share/man/man5/ipf.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipf6.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipfilter.5.gz
+OLD_FILES+=usr/share/man/man8/ipmon.5.gz
+OLD_FILES+=usr/share/man/man5/ipmon.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ipnat.5.gz
 OLD_FILES+=usr/share/man/man5/ipnat.conf.5.gz
 OLD_FILES+=usr/share/man/man5/ippool.5.gz
@@ -6847,11 +6853,14 @@ OLD_FILES+=usr/share/man/man8/ntpq.8.gz
 OLD_FILES+=usr/share/man/man8/ntptime.8.gz
 .endif
 
-.if ${MK_OPENSSH} == no
+.if ${MK_OPENMP} == no
 .if ${MK_GCC} == no
 OLD_FILES+=usr/include/omp.h
+OLD_LIBS+=usr/lib/libgomp.so
+OLD_LIBS+=usr/lib32/libgomp.so
 .endif
 OLD_LIBS+=usr/lib/libomp.so
+OLD_LIBS+=usr/lib32/libomp.so
 .endif
 
 .if ${MK_OPENSSH} == no
@@ -7275,6 +7284,12 @@ OLD_LIBS+=usr/lib/libradius.so.4
 OLD_FILES+=usr/lib/libradius_p.a
 OLD_FILES+=usr/lib/pam_radius.so
 OLD_LIBS+=usr/lib/pam_radius.so.6
+OLD_FILES+=usr/lib32/libradius.a
+OLD_FILES+=usr/lib32/libradius.so
+OLD_LIBS+=usr/lib32/libradius.so.4
+OLD_FILES+=usr/lib32/libradius_p.a
+OLD_FILES+=usr/lib32/pam_radius.so
+OLD_LIBS+=usr/lib32/pam_radius.so.6
 OLD_FILES+=usr/include/radlib.h
 OLD_FILES+=usr/include/radlib_vs.h
 OLD_FILES+=usr/share/man/man3/libradius.3.gz

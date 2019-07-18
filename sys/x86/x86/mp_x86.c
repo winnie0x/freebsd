@@ -65,6 +65,7 @@ __FBSDID("$FreeBSD$");
 
 #include <x86/apicreg.h>
 #include <machine/clock.h>
+#include <machine/cpu.h>
 #include <machine/cputypes.h>
 #include <x86/mca.h>
 #include <machine/md_var.h>
@@ -72,7 +73,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/psl.h>
 #include <machine/smp.h>
 #include <machine/specialreg.h>
-#include <machine/cpu.h>
+#include <x86/ucode.h>
 
 /* lock region used by kernel profiling */
 int	mcount_lock;
@@ -224,6 +225,7 @@ add_deterministic_cache(int type, int level, int share_count)
  *  - BKDG For AMD Family 10h Processors (Publication # 31116)
  *  - BKDG For AMD Family 15h Models 00h-0Fh Processors (Publication # 42301)
  *  - BKDG For AMD Family 16h Models 00h-0Fh Processors (Publication # 48751)
+ *  - PPR For AMD Family 17h Models 00h-0Fh Processors (Publication # 54945)
  */
 static void
 topo_probe_amd(void)
@@ -1362,6 +1364,9 @@ cpususpend_handler(void)
 	/* Wait for resume directive */
 	while (!CPU_ISSET(cpu, &toresume_cpus))
 		ia32_pause();
+
+	/* Re-apply microcode updates. */
+	ucode_reload();
 
 	if (cpu_ops.cpu_resume)
 		cpu_ops.cpu_resume();

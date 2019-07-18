@@ -270,8 +270,10 @@ rfb_recv_set_encodings_msg(struct rfb_softc *rc, int cfd)
 			rc->enc_raw_ok = true;
 			break;
 		case RFB_ENCODING_ZLIB:
-			rc->enc_zlib_ok = true;
-			deflateInit(&rc->zstream, Z_BEST_SPEED);
+			if (!rc->enc_zlib_ok) {
+				deflateInit(&rc->zstream, Z_BEST_SPEED);
+				rc->enc_zlib_ok = true;
+			}
 			break;
 		case RFB_ENCODING_RESIZE:
 			rc->enc_resize_ok = true;
@@ -544,40 +546,23 @@ rfb_send_screen(struct rfb_softc *rc, int cfd, int all)
 		}
 
 		for (x = 0; x < xcells; x++) {
+			if (x == (xcells - 1) && rem_x > 0)
+				cellwidth = rem_x;
+			else
+				cellwidth = PIX_PER_CELL;
+
 			if (rc->hw_crc)
 				crc_p[x] = fast_crc32(p,
-				             PIX_PER_CELL * sizeof(uint32_t),
+				             cellwidth * sizeof(uint32_t),
 				             crc_p[x]);
 			else
 				crc_p[x] = (uint32_t)crc32(crc_p[x],
 				             (Bytef *)p,
-				             PIX_PER_CELL * sizeof(uint32_t));
+				             cellwidth * sizeof(uint32_t));
 
-			p += PIX_PER_CELL;
+			p += cellwidth;
 
 			/* check for crc delta if last row in cell */
-			if ((y & PIXCELL_MASK) == PIXCELL_MASK || y == (h-1)) {
-				if (orig_crc[x] != crc_p[x]) {
-					orig_crc[x] = crc_p[x];
-					crc_p[x] = 1;
-					changes++;
-				} else {
-					crc_p[x] = 0;
-				}
-			}
-		}
-
-		if (rem_x) {
-			if (rc->hw_crc)
-				crc_p[x] = fast_crc32(p,
-				                    rem_x * sizeof(uint32_t),
-				                    crc_p[x]);
-			else
-				crc_p[x] = (uint32_t)crc32(crc_p[x],
-				                    (Bytef *)p,
-				                    rem_x * sizeof(uint32_t));
-			p += rem_x;
-
 			if ((y & PIXCELL_MASK) == PIXCELL_MASK || y == (h-1)) {
 				if (orig_crc[x] != crc_p[x]) {
 					orig_crc[x] = crc_p[x];

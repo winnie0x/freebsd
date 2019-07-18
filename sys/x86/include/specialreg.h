@@ -390,6 +390,7 @@
 /*
  * CPUID instruction 7 Structured Extended Features, leaf 0 edx info
  */
+#define	CPUID_STDEXT3_MD_CLEAR	0x00000400
 #define	CPUID_STDEXT3_TSXFA	0x00002000
 #define	CPUID_STDEXT3_IBPB	0x04000000
 #define	CPUID_STDEXT3_STIBP	0x08000000
@@ -404,6 +405,7 @@
 #define	IA32_ARCH_CAP_RSBA	0x00000004
 #define	IA32_ARCH_CAP_SKIP_L1DFL_VMENTRY	0x00000008
 #define	IA32_ARCH_CAP_SSB_NO	0x00000010
+#define	IA32_ARCH_CAP_MDS_NO	0x00000020
 
 /*
  * CPUID manufacturers identifiers
@@ -906,6 +908,7 @@
 #define	MSR_VM_HSAVE_PA 0xc0010117	/* SVM: host save area address */
 #define	MSR_AMD_CPUID07	0xc0011002	/* CPUID 07 %ebx override */
 #define	MSR_EXTFEATURES	0xc0011005	/* Extended CPUID Features override */
+#define	MSR_LS_CFG	0xc0011020
 #define	MSR_IC_CFG	0xc0011021	/* Instruction Cache Configuration */
 
 /* MSR_VM_CR related */

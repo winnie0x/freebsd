@@ -131,6 +131,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/perfmon.h>
 #endif
 #include <machine/tss.h>
+#include <x86/ucode.h>
 #ifdef SMP
 #include <machine/smp.h>
 #endif
@@ -1578,6 +1579,9 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 
 	kmdp = init_ops.parse_preload_data(modulep);
 
+	physfree += ucode_load_bsp(physfree + KERNBASE);
+	physfree = roundup2(physfree, PAGE_SIZE);
+
 	identify_cpu1();
 	identify_hypervisor();
 	/*
@@ -1864,6 +1868,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 
 	TUNABLE_INT_FETCH("hw.ibrs_disable", &hw_ibrs_disable);
 	TUNABLE_INT_FETCH("hw.spec_store_bypass_disable", &hw_ssb_disable);
+	TUNABLE_INT_FETCH("hw.mds_disable", &hw_mds_disable);
 
 	/* Location of kernel stack for locore */
 	return ((u_int64_t)thread0.td_pcb);
