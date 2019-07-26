@@ -1944,12 +1944,12 @@ vm_map_pmap_enter(vm_map_t map, vm_offset_t addr, vm_prot_t prot,
 	}
 
 	psize = atop(size);
-	if (psize + pindex > object->size) {
-		if (object->size < pindex) {
+	if (psize + pindex > ((object->flags & OBJ_PAD_SUPER) ? object->pad_size : object->size)) {
+		if (((object->flags & OBJ_PAD_SUPER) ? object->pad_size : object->size) < pindex) {
 			VM_OBJECT_RUNLOCK(object);
 			return;
 		}
-		psize = object->size - pindex;
+		psize = ((object->flags & OBJ_PAD_SUPER) ? object->pad_size : object->size) - pindex;
 	}
 
 	start = 0;

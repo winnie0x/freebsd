@@ -1081,6 +1081,7 @@ vnode_pager_generic_getpages_done(struct buf *bp)
 			 */
 			vm_page_set_valid_range(mt, 0,
 			    object->un_pager.vnp.vnp_size - tfoff);
+			vm_page_zero_invalid(mt, TRUE);
 			KASSERT((mt->dirty & vm_page_bits(0,
 			    object->un_pager.vnp.vnp_size - tfoff)) == 0,
 			    ("%s: page %p is dirty", __func__, mt));

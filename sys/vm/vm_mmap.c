@@ -234,7 +234,7 @@ kern_mmap(struct thread *td, uintptr_t addr0, size_t size, int prot, int flags,
 	if ((flags & ~(MAP_SHARED | MAP_PRIVATE | MAP_FIXED | MAP_HASSEMAPHORE |
 	    MAP_STACK | MAP_NOSYNC | MAP_ANON | MAP_EXCL | MAP_NOCORE |
 	    MAP_PREFAULT_READ | MAP_GUARD | MAP_SHAREPT | MAP_RTLD |
-	    MAP_PAD_SUPER |
+	    MAP_PAD_SUPER | MAP_FORCE_RESERV |
 #ifdef MAP_32BIT
 	    MAP_32BIT |
 #endif
@@ -1279,7 +1279,7 @@ vm_mmap_vnode(struct thread *td, vm_size_t objsize,
 			goto done;
 		} else {
 			VM_OBJECT_WLOCK(obj);
-			if (flags & MAP_PAD_SUPER) {
+			if ((flags & MAP_FORCE_RESERV) || (flags & MAP_PAD_SUPER)) {
 				new_size = (obj->size + NPTEPG - 1) & NPTEPG;
 				if (new_size != obj->pad_size) {
 					printf("vm_mmap_vnode: obj->pad_size to be changed from 0x%lx to 0x%lx\n", obj->pad_size, new_size);

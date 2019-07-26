@@ -365,7 +365,7 @@ get_elf_header(int fd, const char *path, const struct stat *sbp)
 	}
 
 	hdr = mmap(NULL, PAGE_SIZE, PROT_READ,
-	    MAP_PRIVATE | MAP_PREFAULT_READ | MAP_PAD_SUPER,
+	    MAP_PRIVATE | MAP_PREFAULT_READ | MAP_ALIGNED_SUPER | MAP_FORCE_RESERV,
 	    fd, 0);
 	if (hdr == (Elf_Ehdr *)MAP_FAILED) {
 		_rtld_error("%s: read error: %s", path, rtld_strerror(errno));
