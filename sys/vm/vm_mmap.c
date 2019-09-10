@@ -1280,7 +1280,7 @@ vm_mmap_vnode(struct thread *td, vm_size_t objsize,
 		} else {
 			VM_OBJECT_WLOCK(obj);
 			if ((flags & MAP_FORCE_RESERV) || (flags & MAP_PAD_SUPER)) {
-				new_size = (obj->size + NPTEPG - 1) & NPTEPG;
+				new_size = (obj->size + NPTEPG - 1) & ~(NPTEPG - 1);
 				if (new_size != obj->pad_size) {
 					printf("vm_mmap_vnode: obj->pad_size to be changed from 0x%lx to 0x%lx\n", obj->pad_size, new_size);
 					obj->pad_size = new_size;
