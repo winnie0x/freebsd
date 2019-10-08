@@ -554,11 +554,12 @@ __elfN(load_section)(struct image_params *imgp, vm_ooffset_t offset,
 	 * While I'm here, might as well check for something else that
 	 * is invalid: filsz cannot be greater than memsz.
 	 */
-	if ((filsz != 0 && (off_t)filsz + offset > imgp->attr->va_size) ||
+	if ((!(prot & VM_PROT_ROUND2M) && filsz != 0 && (off_t)filsz + offset > imgp->attr->va_size) ||
 	    filsz > memsz) {
 		uprintf("elf_load_section: truncated ELF file\n");
 		return (ENOEXEC);
 	}
+	prot &= ~VM_PROT_ROUND2M;
 
 	object = imgp->object;
 	map = &imgp->proc->p_vmspace->vm_map;
@@ -987,8 +988,6 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 				 * previous pass over program headers.
 				 */
 				if ((prot & VM_PROT_WRITE) == 0 &&
-				    round_2mpage(phdr[i].p_offset +
-				    phdr[i].p_filesz) <= imgp->attr->va_size &&
 				    next_load[i] > 0 &&
 				    phdr[next_load[i]].p_vaddr >=
 				    phdr[i].p_vaddr +
@@ -998,13 +997,28 @@ __CONCAT(exec_, __elfN(imgact))(struct image_params *imgp)
 					round_2m = true;
 				}
 			}
+			if (round_2m) {
+				if (round_2mpage(phdr[i].p_offset +
+				    phdr[i].p_filesz) > imgp->attr->va_size) {
+					VM_OBJECT_WLOCK(imgp->object);
+					vm_pindex_t new_size = (imgp->object->size + NPTEPG - 1) & ~(NPTEPG - 1);
+					if (new_size != imgp->object->pad_size) {
+						printf("exec___elfN(imgact): imgp->object->pad_size to be changed from 0x%lx to 0x%lx\n", imgp->object->pad_size, new_size);
+						imgp->object->pad_size = new_size;
+						if (imgp->object->flags & OBJ_PAD_SUPER)
+							panic("exec___elfN(imgact): OBJ_PAD_SUPER already set");
+						imgp->object->flags |= OBJ_PAD_SUPER;
+					}
+					VM_OBJECT_WUNLOCK(imgp->object);
+				}
+			}
 			error = __elfN(load_section)(imgp, phdr[i].p_offset,
 			    (caddr_t)(uintptr_t)phdr[i].p_vaddr + et_dyn_addr,
 			    round_2m ?
 			    round_2mpage(phdr[i].p_memsz) : phdr[i].p_memsz,
 			    round_2m ?
 			    round_2mpage(phdr[i].p_filesz) : phdr[i].p_filesz,
-			    prot, sv->sv_pagesize);
+			    round_2m ? (prot | VM_PROT_ROUND2M) : prot, sv->sv_pagesize);
 			if (error != 0)
 				goto ret;
 
