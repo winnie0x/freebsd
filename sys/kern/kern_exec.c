@@ -989,6 +989,14 @@ exec_map_first_page(imgp)
 #if VM_NRESERVLEVEL > 0
 	vm_object_color(object, 0);
 #endif
+	vm_pindex_t new_size = (object->size + NPTEPG - 1) & ~(NPTEPG - 1);
+	if (new_size != object->pad_size) {
+		printf("exec_map_first_page: object->pad_size to be changed from 0x%lx to 0x%lx\n", object->pad_size, new_size);
+		object->pad_size = new_size;
+		if (object->flags & OBJ_PAD_SUPER)
+			panic("exec_map_first_page: OBJ_PAD_SUPER already set");
+		object->flags |= OBJ_PAD_SUPER;
+	}
 	ma[0] = vm_page_grab(object, 0, VM_ALLOC_NORMAL | VM_ALLOC_NOBUSY);
 	if (ma[0]->valid != VM_PAGE_BITS_ALL) {
 		vm_page_xbusy(ma[0]);
