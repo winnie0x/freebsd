@@ -301,9 +301,23 @@ vm_fault_fill_holes(struct faultstate *fs, int *holes, int num_holes)
 				    holes[2 * i]))
 					break;
 			}
+			/*
+			 * Some other thread/process has had a page fault in
+			 * the current hole.
+			 * They must have more up-to-date information on holes
+			 * than me.
+			 * Return and let them fill the holes.
+			 */
+			vm_pindex_t alloc_index = vm_reserv_popidx_to_pindex(fs->m,
+			    (holes[2 * i] + (zero_fill ? fs->object->size : holes[2 * i + 1])) / 2);
+			if (vm_page_lookup(fs->object, alloc_index) != NULL) {
+				printf("%s: Early returning because pindex 0x%lx already present\n", __func__, alloc_index);
+				if (freepath != NULL)
+					free(freepath, M_TEMP);
+				return (false);
+			}
 			m = vm_page_alloc(fs->object,
-			    vm_reserv_popidx_to_pindex(fs->m,
-			    (holes[2 * i] + (zero_fill ? fs->object->size : holes[2 * i + 1])) / 2),
+			    alloc_index,
 			    alloc_req);
 		}
 		if (m == NULL) {
